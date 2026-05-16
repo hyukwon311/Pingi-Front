@@ -1,116 +1,134 @@
 /**
- * @file BaselineTest.tsx - 기준 발음 측정 페이지
+ * @file BaselineTest.tsx - 베이스라인 녹음 페이지
  *
- * 술 마시기 전의 기준 발음을 측정하는 화면.
- * 사용자는 3개의 잰말 문장을 순서대로 녹음하며,
- * 모든 문장 녹음이 완료되면 서버에 전송 후 대기실로 복귀한다.
- * 대기실에서 해당 참가자는 자동으로 "준비 완료" 상태가 된다.
- *
- * 플로우: 문장 표시 → 녹음 버튼 클릭 → 녹음 → 정지 → 다음 문장 → ... → 서버 전송 → 대기실 복귀
+ * 술자리 시작 전, 사용자의 정상 발음 상태를 측정하는 화면이다.
+ * 3개의 잰말(난이도 높은 문장)을 하나씩 녹음하며, 각 문장마다 5초간 녹음한다.
+ * "녹음 시작" / "녹음 종료" 버튼으로 수동 제어하며,
+ * 녹음 중에는 실시간 파형(VoiceWaveform)과 진행 상황(ProgressBar)이 표시된다.
+ * 3회차 모두 완료하면 베이스라인 데이터를 서버에 저장하고,
+ * 술자리 메인 화면(SessionDashboard)으로 이동한다.
  */
-import { useState, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
-import { useSession } from '@/hooks/useSession'
-import { useVoiceRecorder } from '@/hooks/useVoiceRecorder'
-import { voiceApi } from '@/services/voiceApi'
 import { BASELINE_SENTENCES } from '@/constants/sentences'
-import Header from '@/components/layout/Header'
 import Button from '@/components/common/Button'
-import SentenceDisplay from '@/components/voice/SentenceDisplay'
-import RecordButton from '@/components/voice/RecordButton'
+import Card from '@/components/common/Card'
+import VoiceWaveform from '@/components/voice/VoiceWaveform'
+import RecStatus from '@/components/voice/RecStatus'
+import ProgressBar from '@/components/common/ProgressBar'
 import PageTransition from '@/components/layout/PageTransition'
+import { useVoiceRecorder } from '@/hooks/useVoiceRecorder'
+
+const RECORD_DURATION = 5
 
 export default function BaselineTest() {
-  const { id } = useParams()
+  const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
-  const { user } = useAuth()
-  const { completeBaseline } = useSession()
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [completed, setCompleted] = useState<boolean[]>(BASELINE_SENTENCES.map(() => false))
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [recordSeconds, setRecordSeconds] = useState(0)
   const { isRecording, startRecording, stopRecording, resetRecording } = useVoiceRecorder()
-  const audioBlobsRef = useRef<Blob[]>([])
 
-  const isAllDone = completed.every(Boolean)
+  const isAllDone = currentIndex >= BASELINE_SENTENCES.length
 
-  const handleStopAndNext = () => {
+  const handleComplete = useCallback(() => {
     stopRecording()
-    const next = [...completed]
-    next[currentIndex] = true
-    setCompleted(next)
+    resetRecording()
+    setRecordSeconds(0)
 
-    setTimeout(() => {
-      if (audioBlobsRef.current.length <= currentIndex) {
-        // useVoiceRecorder의 audioBlob은 비동기로 생성되므로 약간의 지연 후 수집
-      }
-      resetRecording()
-      if (currentIndex < BASELINE_SENTENCES.length - 1) {
-        setCurrentIndex(currentIndex + 1)
-      }
-    }, 100)
-  }
-
-  const handleSubmit = async () => {
-    if (!id || !user) return
-    setIsSubmitting(true)
-    setError(null)
-
-    try {
-      await voiceApi.submitBaseline(id, new Blob(audioBlobsRef.current, { type: 'audio/webm' }))
-      completeBaseline(user.id)
-      navigate(`/session/${id}/waiting`)
-    } catch {
-      setError('전송에 실패했습니다. 다시 시도해주세요.')
-    } finally {
-      setIsSubmitting(false)
+    if (currentIndex < BASELINE_SENTENCES.length - 1) {
+      setCurrentIndex(currentIndex + 1)
+    } else {
+      setCurrentIndex(BASELINE_SENTENCES.length)
     }
+  }, [currentIndex, stopRecording, resetRecording])
+
+  useEffect(() => {
+    if (!isRecording) return
+
+    const timer = setInterval(() => {
+      setRecordSeconds((s) => {
+        if (s >= RECORD_DURATION - 1) {
+          handleComplete()
+          return 0
+        }
+        return s + 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [isRecording, handleComplete])
+
+  const handleStartRecording = () => {
+    setRecordSeconds(0)
+    startRecording()
   }
 
   return (
     <PageTransition>
-      <Header title="기준 발음 측정" showBack />
-      <div className="flex-1 px-6 py-6 flex flex-col">
-        <div className="text-center mb-10">
-          <h2 className="text-[20px] font-bold text-grey-900">
-            술 마시기 전 발음을 측정해요
-          </h2>
-          <p className="text-[14px] text-grey-500 mt-2 leading-relaxed">
-            아래 문장을 또박또박 읽어주세요
-          </p>
-        </div>
-
-        <div className="flex-1 flex flex-col items-center justify-center gap-10">
-          <SentenceDisplay
-            sentence={BASELINE_SENTENCES[currentIndex]}
-            currentIndex={currentIndex}
-            totalCount={BASELINE_SENTENCES.length}
-          />
-
-          <RecordButton
-            isRecording={isRecording}
-            onStart={startRecording}
-            onStop={handleStopAndNext}
-          />
-
-          <p className="text-[13px] text-grey-400">
-            {isRecording ? '듣고 있어요... 다 읽으면 버튼을 눌러주세요' : '버튼을 눌러 녹음을 시작하세요'}
-          </p>
-        </div>
-
-        <div className="pb-6 mt-10 flex flex-col gap-2">
-          {error && (
-            <p className="text-[13px] text-red-500 text-center">{error}</p>
+      <div className="flex-1 px-5 py-6 flex flex-col">
+        <div className="text-center">
+          <h1 className="font-display text-xl text-brown-900">
+            🎙️ 베이스라인 녹음
+          </h1>
+          {!isAllDone && (
+            <p className="text-sm text-brown-500 mt-1">
+              ({currentIndex + 1} / {BASELINE_SENTENCES.length} 회차)
+            </p>
           )}
-          <Button
-            fullWidth
-            size="lg"
-            disabled={!isAllDone || isSubmitting}
-            onClick={handleSubmit}
-          >
-            {isSubmitting ? '전송 중...' : '측정 완료! 대기실로 돌아가기'}
-          </Button>
+        </div>
+
+        {isAllDone ? (
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <div className="text-5xl mb-4">✅</div>
+            <p className="font-display text-lg text-brown-900">
+              베이스라인 저장 완료!
+            </p>
+            <p className="text-sm text-brown-500 mt-2">
+              술자리 시작합니다 🍺
+            </p>
+          </div>
+        ) : (
+          <>
+            <Card className="mt-6 text-center">
+              <p className="text-brown-500 text-xs mb-2">
+                위 문장을 자연스럽게 읽어주세요
+              </p>
+              <p className="font-display text-lg text-brown-900 leading-relaxed">
+                "{BASELINE_SENTENCES[currentIndex]}"
+              </p>
+            </Card>
+
+            <div className="flex-1 flex flex-col items-center justify-center gap-6">
+              {isRecording ? (
+                <>
+                  <VoiceWaveform active />
+                  <RecStatus seconds={recordSeconds + 1} total={RECORD_DURATION} />
+                  <ProgressBar percent={((recordSeconds + 1) / RECORD_DURATION) * 100} />
+                </>
+              ) : (
+                <div className="text-center">
+                  <p className="text-sm text-brown-400">
+                    버튼을 눌러 녹음을 시작하세요
+                  </p>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        <div className="mt-auto pt-6">
+          {isAllDone ? (
+            <Button onClick={() => navigate(`/r/${code}/live`)}>
+              술자리 시작! 🍺
+            </Button>
+          ) : (
+            <Button
+              variant={isRecording ? 'secondary' : 'primary'}
+              onClick={isRecording ? handleComplete : handleStartRecording}
+            >
+              {isRecording ? '⏹ 녹음 중지' : '🔴 녹음 시작'}
+            </Button>
+          )}
         </div>
       </div>
     </PageTransition>
