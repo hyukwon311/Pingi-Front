@@ -1,14 +1,15 @@
 /**
  * @file RecordButton.tsx - 음성 녹음 버튼 컴포넌트
  *
- * 둥근 원형 버튼으로, 녹음 상태에 따라 외형이 달라진다:
- * - 녹음 전: 보라색 원 + 마이크 아이콘 (누르면 녹음 시작)
- * - 녹음 중: 흰색 원 + 빨간 정지 사각형 (누르면 녹음 정지)
+ * 녹음 상태에 따라 외형이 달라진다:
+ * - 녹음 전: ink 색상 원 + 마이크 아이콘
+ * - 녹음 중: 깜빡이는 빨간 점 + 정지 버튼
  *
  * @param isRecording - 현재 녹음 중 여부
  * @param onStart - 녹음 시작 콜백
  * @param onStop - 녹음 정지 콜백
  */
+
 interface RecordButtonProps {
   isRecording: boolean
   onStart: () => void
@@ -22,13 +23,13 @@ export default function RecordButton({ isRecording, onStart, onStop }: RecordBut
       className={`
         w-16 h-16 rounded-full flex items-center justify-center transition-all
         ${isRecording
-          ? 'bg-white shadow-lg scale-110'
-          : 'bg-pingi-500 active:bg-pingi-600 shadow-md'
+          ? 'bg-white shadow-lg scale-110 border-2 border-brown-300'
+          : 'bg-ink active:opacity-90 shadow-md'
         }
       `}
     >
       {isRecording ? (
-        <div className="w-6 h-6 rounded-sm bg-status-danger" />
+        <div className="w-6 h-6 rounded-sm bg-ink" />
       ) : (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-white">
           <path
