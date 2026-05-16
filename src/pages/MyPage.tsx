@@ -1,7 +1,7 @@
 /**
  * @file MyPage.tsx - 마이페이지
  *
- * 사용자의 프로필 정보와 개인 통계(총 참여, 평균 취도, 최다 참가 세션)를 표시한다.
+ * 사용자의 프로필 정보와 개인 통계(총 참여, 평균 취도, 주량)를 표시한다.
  * 하단의 로그아웃 버튼으로 로그아웃할 수 있다.
  */
 import { useNavigate } from 'react-router-dom'
@@ -14,7 +14,7 @@ import Card from '@/components/common/Card'
 const stats = [
   { label: '총 참여', value: '12회' },
   { label: '평균 취도', value: 'Lv.2' },
-  { label: '최다 참가 세션', value: '금요 회식' },
+  { label: '주량', value: '5잔' },
 ]
 
 export default function MyPage() {
