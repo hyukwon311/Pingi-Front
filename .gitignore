@@ -23,4 +23,14 @@ dist-ssr
 *.sln
 *.sw?
 
-/.history
+/.history.claude/
+.omc/
+
+# 개발 도구 설정
+.claude/
+.omc/
+
+# 프로젝트 문서 (README.md 제외)
+CLAUDE.md
+BACKEND-CHECKLIST.md
+pingi-docs/

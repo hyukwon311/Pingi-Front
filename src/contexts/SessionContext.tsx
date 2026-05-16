@@ -1,95 +1,141 @@
 /**
- * @file SessionContext.tsx - 현재 세션 상태 관리 Context
+ * @file SessionContext.tsx - 술자리 세션 상태 관리 Context
  *
- * 진행 중인 술자리 세션의 전역 상태를 useReducer 패턴으로 관리한다.
- * 세션 정보 설정, 참가자 업데이트, 음주량 변경, 초기화 등의 액션을 지원한다.
- *
- * 사용법:
- * - 컴포넌트에서 `useSessionContext()` 훅으로 { state, dispatch }에 접근
- * - 편의상 `useSession()` 훅 (hooks/useSession.ts)을 사용하는 것을 권장
+ * 진행 중인 술자리의 실시간 상태를 전역으로 관리하는 Context다.
+ * WebSocket 연결을 통해 서버로부터 다음과 같은 실시간 이벤트를 수신하고 상태를 업데이트한다:
+ * - member_joined: 새 멤버 입장 시 멤버 목록 갱신
+ * - member_eta_updated: 멤버의 도착 예정 시간 변경
+ * - session_started: 술자리 시작 (베이스라인 측정 단계로 이동)
+ * - pingi_time_triggered: 핑이타임 발동 알림
+ * - pingi_time_result: 핑이타임 결과 수신 및 레벨 업데이트
+ * - session_ended: 술자리 종료
+ * - home_checkin_updated: 귀가 상태 변경
+ * RoomContext와 함께 사용되며, 모든 페이지에서 useSession() 훅으로 세션 상태에 접근할 수 있다.
  */
-import { createContext, useContext, useReducer, type ReactNode, type Dispatch } from 'react'
-import type { Session, Participant } from '@/types/session'
+import {
+  createContext,
+  useContext,
+  useReducer,
+  useEffect,
+  useCallback,
+  type ReactNode,
+  type Dispatch,
+} from 'react'
+import type { Room, Member, DrinkType } from '@/types/room'
 
-/** 세션 리듀서가 처리하는 액션 타입들 */
 type SessionAction =
-  | { type: 'SET_SESSION'; payload: Session }               // 세션 전체 데이터 설정
-  | { type: 'UPDATE_PARTICIPANT'; payload: Participant }     // 특정 참가자 정보 갱신
-  | { type: 'UPDATE_DRINK_COUNT'; payload: { userId: string; count: number } }  // 음주량 변경
-  | { type: 'COMPLETE_BASELINE'; payload: { userId: string } }  // baseline 측정 완료 → 준비 완료 처리
-  | { type: 'CLEAR' }                                       // 세션 초기화 (퇴장 시)
+  | { type: 'SET_ROOM'; payload: Room }
+  | { type: 'UPDATE_MEMBER'; payload: Member }
+  | { type: 'UPDATE_DRINK_COUNT'; payload: { memberId: string; drinkType: DrinkType; count: number } }
+  | { type: 'TRIGGER_PINGI_TIME' }
+  | { type: 'SET_PINGI_TIME_RESULT'; payload: { results: Member[] } }
+  | { type: 'CLEAR' }
 
 interface SessionState {
-  session: Session | null
+  room: Room | null
+  isPingiTimeActive: boolean
+  pingiTimeResults: Member[] | null
 }
 
-const initialState: SessionState = { session: null }
+const initialState: SessionState = {
+  room: null,
+  isPingiTimeActive: false,
+  pingiTimeResults: null,
+}
 
-/**
- * 세션 상태 리듀서.
- * 불변성을 유지하며 세션 데이터를 업데이트한다.
- */
 function reducer(state: SessionState, action: SessionAction): SessionState {
   switch (action.type) {
-    case 'SET_SESSION':
-      return { session: action.payload }
-    case 'UPDATE_PARTICIPANT':
-      if (!state.session) return state
+    case 'SET_ROOM':
+      return { ...state, room: action.payload }
+
+    case 'UPDATE_MEMBER':
+      if (!state.room) return state
       return {
-        session: {
-          ...state.session,
-          participants: state.session.participants.map((p) =>
-            p.user.id === action.payload.user.id ? action.payload : p,
+        ...state,
+        room: {
+          ...state.room,
+          members: state.room.members.map((m) =>
+            m.memberId === action.payload.memberId ? action.payload : m
           ),
         },
       }
+
     case 'UPDATE_DRINK_COUNT':
-      if (!state.session) return state
+      if (!state.room) return state
       return {
-        session: {
-          ...state.session,
-          participants: state.session.participants.map((p) =>
-            p.user.id === action.payload.userId
-              ? { ...p, drinkCount: Math.max(0, action.payload.count) }
-              : p,
+        ...state,
+        room: {
+          ...state.room,
+          members: state.room.members.map((m) =>
+            m.memberId === action.payload.memberId
+              ? {
+                  ...m,
+                  drinkCounts: {
+                    ...m.drinkCounts,
+                    [action.payload.drinkType]: Math.max(0, action.payload.count),
+                  },
+                }
+              : m
           ),
         },
       }
-    case 'COMPLETE_BASELINE':
-      if (!state.session) return state
-      return {
-        session: {
-          ...state.session,
-          participants: state.session.participants.map((p) =>
-            p.user.id === action.payload.userId
-              ? { ...p, baselineCompleted: true }
-              : p,
-          ),
-        },
-      }
+
+    case 'TRIGGER_PINGI_TIME':
+      return { ...state, isPingiTimeActive: true, pingiTimeResults: null }
+
+    case 'SET_PINGI_TIME_RESULT':
+      return { ...state, isPingiTimeActive: false, pingiTimeResults: action.payload.results }
+
     case 'CLEAR':
       return initialState
+
     default:
       return state
   }
 }
 
-const SessionContext = createContext<{ state: SessionState; dispatch: Dispatch<SessionAction> } | null>(null)
+interface SessionContextValue {
+  state: SessionState
+  dispatch: Dispatch<SessionAction>
+  connectWebSocket: (roomCode: string) => void
+  disconnectWebSocket: () => void
+}
 
-/** 세션 상태를 제공하는 Provider 컴포넌트 */
+const SessionContext = createContext<SessionContextValue | null>(null)
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState)
+
+  const connectWebSocket = useCallback((roomCode: string) => {
+    // TODO: 실제 WebSocket 연결 구현
+    // const ws = new WebSocket(`wss://api.pingi.app/rooms/${roomCode}/ws`)
+    // ws.onmessage = (event) => {
+    //   const data = JSON.parse(event.data)
+    //   switch (data.type) {
+    //     case 'member_joined':
+    //       dispatch({ type: 'UPDATE_MEMBER', payload: data.member })
+    //       break
+    //     case 'pingi_time_triggered':
+    //       dispatch({ type: 'TRIGGER_PINGI_TIME' })
+    //       break
+    //     // ... 다른 이벤트 처리
+    //   }
+    // }
+    console.log('WebSocket 연결:', roomCode)
+  }, [])
+
+  const disconnectWebSocket = useCallback(() => {
+    // TODO: WebSocket 연결 해제
+    console.log('WebSocket 연결 해제')
+  }, [])
+
   return (
-    <SessionContext.Provider value={{ state, dispatch }}>
+    <SessionContext.Provider value={{ state, dispatch, connectWebSocket, disconnectWebSocket }}>
       {children}
     </SessionContext.Provider>
   )
 }
 
-/**
- * 세션 Context에 접근하는 커스텀 훅.
- * SessionProvider 바깥에서 호출하면 에러를 던진다.
- */
 export function useSessionContext() {
   const ctx = useContext(SessionContext)
   if (!ctx) throw new Error('useSessionContext must be used within SessionProvider')
