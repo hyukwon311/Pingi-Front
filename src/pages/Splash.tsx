@@ -21,13 +21,13 @@ export default function Splash() {
   }, [navigate, user])
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-dvh bg-gradient-to-b from-pingi-500 to-pingi-600">
+    <div className="flex flex-col items-center justify-center min-h-dvh bg-white">
       <div className="flex flex-col items-center gap-4 animate-fade-in">
-        <div className="w-24 h-24 rounded-[28px] bg-white/20 backdrop-blur-sm flex items-center justify-center">
+        <div className="w-24 h-24 rounded-[28px] bg-pingi-50 flex items-center justify-center">
           <span className="text-[44px]">🍻</span>
         </div>
-        <h1 className="text-[32px] font-bold text-white tracking-tight mt-1">핑이</h1>
-        <p className="text-[14px] text-white/60">발음으로 측정하는 나의 취도</p>
+        <h1 className="text-[32px] font-bold text-pingi-600 tracking-tight mt-1">핑이</h1>
+        <p className="text-[14px] text-grey-400">발음으로 측정하는 나의 취도</p>
       </div>
     </div>
   )
