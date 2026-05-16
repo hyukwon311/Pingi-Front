@@ -5,11 +5,13 @@
  * 각 세션의 이름, 날짜, 참가 인원, 소요 시간, 본인 취도를 표시한다.
  * 세션 카드 클릭 시 해당 세션의 결과 페이지로 이동한다.
  */
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Header from '@/components/layout/Header'
 import PageTransition from '@/components/layout/PageTransition'
 import Card from '@/components/common/Card'
 import Badge from '@/components/common/Badge'
+import MonthPicker from '@/components/common/MonthPicker'
 import type { Session } from '@/types/session'
 
 /** TODO: API 연동 후 제거할 더미 기록 데이터 */
@@ -82,14 +84,26 @@ const levelBadge: Record<number, { label: string; variant: 'success' | 'warning'
 
 export default function History() {
   const navigate = useNavigate()
+  const now = new Date()
+  const [year, setYear] = useState(now.getFullYear())
+  const [month, setMonth] = useState(now.getMonth() + 1)
+
+  const filtered = mockHistory.filter((s) => {
+    const d = new Date(s.createdAt)
+    return d.getFullYear() === year && d.getMonth() + 1 === month
+  })
 
   return (
     <PageTransition>
       <Header variant="home" title="기록" />
       <div className="flex flex-col gap-3 px-5 pb-6">
-        <p className="text-[13px] text-grey-500 mt-1">총 {mockHistory.length}회 참여</p>
+        <MonthPicker year={year} month={month} onChange={(y, m) => { setYear(y); setMonth(m) }} />
 
-        {mockHistory.map((session) => {
+        <p className="text-[13px] text-grey-500">
+          {year}년 {month}월 · {filtered.length}회 참여
+        </p>
+
+        {filtered.map((session) => {
           const myParticipant = session.participants.find((p) => p.user.id === '1')
           const badge = levelBadge[myParticipant?.drunkLevel ?? 1]
           return (
@@ -111,9 +125,9 @@ export default function History() {
           )
         })}
 
-        {mockHistory.length === 0 && (
+        {filtered.length === 0 && (
           <Card className="text-center py-16">
-            <p className="text-[14px] text-grey-400">아직 기록이 없어요</p>
+            <p className="text-[14px] text-grey-400">{month}월에는 기록이 없어요</p>
           </Card>
         )}
       </div>
