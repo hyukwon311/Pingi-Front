@@ -25,7 +25,7 @@ const variantStyles: Record<ButtonVariant, string> = {
   primary: 'bg-pingi-500 text-white active:bg-pingi-600',
   secondary: 'bg-pingi-50 text-pingi-600 active:bg-pingi-100',
   ghost: 'bg-transparent text-grey-600 active:bg-grey-100',
-  danger: 'bg-grey-100 text-status-danger active:bg-grey-200',
+  danger: 'bg-[#ffeeee] text-status-danger active:bg-[#fddede]',
 }
 
 /** size별 패딩·폰트·둥글기 스타일 */
