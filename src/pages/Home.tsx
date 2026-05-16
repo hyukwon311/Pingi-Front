@@ -2,9 +2,10 @@
  * @file Home.tsx - 홈 화면 (메인 대시보드)
  *
  * 로그인 후 첫 화면으로, 다음 요소들로 구성된다:
+ * - 초대 코드 입장 안내 배너 (AlertBanner)
  * - 섹션 탭 (전체/대기중/진행중)으로 세션 목록 필터링
  * - 참여 중인 세션 목록 (SessionListCard)
- * - 초대 코드 입력 영역 (직접 참가)
+ * - 초대 코드 직접 입력 영역
  * - 월간 참여 통계 (StatsSummaryCard)
  * - 내 프로필 요약 (ProfileCard)
  *
@@ -20,6 +21,7 @@ import SessionListCard from '@/components/home/SessionListCard'
 import SectionTabs from '@/components/home/SectionTabs'
 import StatsSummaryCard from '@/components/home/StatsSummaryCard'
 import ProfileCard from '@/components/home/ProfileCard'
+import AlertBanner from '@/components/home/AlertBanner'
 import type { Session } from '@/types/session'
 
 const TABS = ['전체', '대기중', '진행중']
@@ -82,19 +84,12 @@ export default function Home() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState(0)
   const [inviteCode, setInviteCode] = useState('')
-
   const filteredSessions = filterSessions(mockSessions, activeTab)
   const currentMonth = new Date().getMonth() + 1
   const monthlyCount = mockSessions.filter((s) => {
     const d = new Date(s.createdAt)
     return d.getMonth() + 1 === currentMonth
   }).length
-
-  const handleJoin = () => {
-    if (inviteCode.trim()) {
-      navigate(`/session/join?code=${inviteCode.trim()}`)
-    }
-  }
 
   return (
     <PageTransition>
@@ -112,6 +107,8 @@ export default function Home() {
       />
 
       <div className="flex flex-col gap-3 pb-6">
+        <AlertBanner />
+
         <SectionTabs tabs={TABS} activeIndex={activeTab} onChange={setActiveTab} />
 
         <SessionListCard sessions={filteredSessions} />
@@ -124,7 +121,9 @@ export default function Home() {
             className="flex-1 min-w-0 h-[52px] px-5 rounded-2xl border-none bg-white text-grey-900 text-[15px] placeholder:text-grey-400 focus:outline-none focus:ring-2 focus:ring-pingi-500/20 transition-all"
           />
           <button
-            onClick={handleJoin}
+            onClick={() => {
+              if (inviteCode.trim()) navigate(`/session/join?code=${inviteCode.trim()}`)
+            }}
             disabled={!inviteCode.trim()}
             className="shrink-0 h-[52px] w-[76px] rounded-2xl bg-pingi-50 text-pingi-600 text-[14px] font-semibold active:bg-pingi-100 transition-all disabled:opacity-30 disabled:pointer-events-none"
           >
