@@ -6,7 +6,7 @@
  * "녹음 시작" / "녹음 종료" 버튼으로 수동 제어하며,
  * 녹음 중에는 실시간 파형(VoiceWaveform)과 진행 상황(ProgressBar)이 표시된다.
  * 3회차 모두 완료하면 베이스라인 데이터를 서버에 저장하고,
- * 술자리 메인 화면(SessionDashboard)으로 이동한다.
+ * 모든 멤버가 완료될 때까지 대기 후 술자리 메인 화면(SessionDashboard)으로 이동한다.
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -18,6 +18,8 @@ import RecStatus from '@/components/voice/RecStatus'
 import ProgressBar from '@/components/common/ProgressBar'
 import PageTransition from '@/components/layout/PageTransition'
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder'
+import { useWebSocket } from '@/hooks/useWebSocket'
+import { completeBaseline, getCurrentMemberId } from '@/services/api'
 
 const RECORD_DURATION = 5
 
@@ -26,9 +28,38 @@ export default function BaselineTest() {
   const navigate = useNavigate()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [recordSeconds, setRecordSeconds] = useState(0)
+  const [waitingForOthers, setWaitingForOthers] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const { isRecording, startRecording, stopRecording, resetRecording } = useVoiceRecorder()
 
+  // WebSocket 연결 - all_baseline_complete 이벤트 시 자동으로 /live로 이동
+  useWebSocket({
+    roomCode: code || '',
+  })
+
   const isAllDone = currentIndex >= BASELINE_SENTENCES.length
+
+  const handleBaselineComplete = async () => {
+    const memberId = getCurrentMemberId()
+    if (!memberId) return
+
+    setSubmitting(true)
+    try {
+      const result = await completeBaseline(memberId)
+      if (result.allCompleted) {
+        // 모든 멤버가 완료됨 - WebSocket 이벤트로 자동 이동됨
+        // 하지만 API 호출한 사람은 바로 이동
+        navigate(`/r/${code}/live`)
+      } else {
+        // 아직 다른 멤버 대기 중
+        setWaitingForOthers(true)
+      }
+    } catch (error) {
+      console.error('Failed to complete baseline:', error)
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   const handleComplete = useCallback(() => {
     stopRecording()
@@ -79,13 +110,27 @@ export default function BaselineTest() {
 
         {isAllDone ? (
           <div className="flex-1 flex flex-col items-center justify-center">
-            <div className="text-5xl mb-4">✅</div>
-            <p className="font-display text-lg text-brown-900">
-              베이스라인 저장 완료!
-            </p>
-            <p className="text-sm text-brown-500 mt-2">
-              술자리 시작합니다 🍺
-            </p>
+            {waitingForOthers ? (
+              <>
+                <div className="text-5xl mb-4 animate-pulse">⏳</div>
+                <p className="font-display text-lg text-brown-900">
+                  다른 멤버를 기다리는 중...
+                </p>
+                <p className="text-sm text-brown-500 mt-2">
+                  모두 베이스라인 녹음이 완료되면<br />자동으로 이동해요
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="text-5xl mb-4">✅</div>
+                <p className="font-display text-lg text-brown-900">
+                  베이스라인 저장 완료!
+                </p>
+                <p className="text-sm text-brown-500 mt-2">
+                  잠시만 기다려주세요...
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <>
@@ -118,9 +163,15 @@ export default function BaselineTest() {
 
         <div className="mt-auto pt-6">
           {isAllDone ? (
-            <Button onClick={() => navigate(`/r/${code}/live`)}>
-              술자리 시작! 🍺
-            </Button>
+            waitingForOthers ? (
+              <div className="text-center py-3 bg-brown-100 rounded-xl">
+                <p className="text-sm text-brown-500">다른 멤버 대기 중...</p>
+              </div>
+            ) : (
+              <Button onClick={handleBaselineComplete} disabled={submitting}>
+                {submitting ? '저장 중...' : '완료! 🎉'}
+              </Button>
+            )
           ) : (
             <Button
               variant={isRecording ? 'secondary' : 'primary'}

@@ -1,11 +1,5 @@
 /**
  * @file CharacterSelect.tsx - 캐릭터 선택 페이지
- *
- * 사용자가 자신의 강아지 캐릭터(견종)를 선택하는 화면이다.
- * 6가지 견종(덕배, 뽀삐, 콩이, 곰자, 눈송이, 멍구)을 3×2 그리드로 표시하며,
- * 각 캐릭터는 LV0 상태의 SVG 이미지와 이름, 특징 태그를 포함한다.
- * 선택된 캐릭터는 노란색(highlight) 테두리로 강조되며,
- * 선택 완료 후 도착 정보 입력 화면으로 이동한다.
  */
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -14,6 +8,7 @@ import Button from '@/components/common/Button'
 import Character, { breedNames } from '@/components/common/Character'
 import PageTransition from '@/components/layout/PageTransition'
 import type { CharacterBreed } from '@/types/room'
+import { updateMember, getCurrentMemberId } from '@/services/api'
 
 interface CharacterOption {
   breed: CharacterBreed
@@ -35,11 +30,27 @@ export default function CharacterSelect() {
   const navigate = useNavigate()
   const { setCharacter } = useRoom()
   const [selected, setSelected] = useState<CharacterBreed | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!selected) return
-    setCharacter(selected)
-    navigate(`/r/${code}/arrival`)
+    
+    setSaving(true)
+    try {
+      const memberId = getCurrentMemberId()
+      if (memberId) {
+        await updateMember(memberId, { breed: selected })
+      }
+      setCharacter(selected)
+      navigate(`/r/${code}/arrival`)
+    } catch (error) {
+      console.error('Failed to save character:', error)
+      // 에러가 나도 일단 진행
+      setCharacter(selected)
+      navigate(`/r/${code}/arrival`)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const selectedChar = characters.find((c) => c.breed === selected)
@@ -84,8 +95,8 @@ export default function CharacterSelect() {
         )}
 
         <div className="mt-auto pt-6">
-          <Button onClick={handleNext} disabled={!selected}>
-            다음
+          <Button onClick={handleNext} disabled={!selected || saving}>
+            {saving ? '저장 중...' : '다음'}
           </Button>
         </div>
       </div>

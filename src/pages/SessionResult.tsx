@@ -1,19 +1,15 @@
 /**
  * @file SessionResult.tsx - 핑이타임 결과 페이지
- *
- * 핑이타임 측정 후 모든 멤버의 취도 변화를 확인하는 결과 화면이다.
- * 상단에는 가장 많이 취한 사람(1위)의 캐릭터가 하이라이트 카드로 표시되고,
- * 하단에는 전체 순위 테이블이 나타나 각 멤버의 레벨 변화(▲+1, ▲+2 등)를 보여준다.
- * 공복으로 시작한 멤버가 있다면 하단에 경고 메시지가 표시되어 식사를 권유한다.
- * 핑이타임마다 이 화면을 통해 누가 가장 빨리 취하는지 실시간으로 확인할 수 있다.
  */
-import { useNavigate, useParams } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import Button from '@/components/common/Button'
 import Card from '@/components/common/Card'
 import Character from '@/components/common/Character'
-import { BREEDS, LEVEL_INFO } from '@/components/common/Character'
+import { BREEDS } from '@/components/common/Character'
 import PageTransition from '@/components/layout/PageTransition'
 import type { CharacterBreed } from '@/types/room'
+import { getRoom, getCurrentMemberId } from '@/services/api'
 
 interface ResultMember {
   memberId: string
@@ -28,18 +24,56 @@ interface ResultMember {
 export default function SessionResult() {
   const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
+  
+  const [results, setResults] = useState<ResultMember[]>([])
+  const [pingiTimeNumber, setPingiTimeNumber] = useState(1)
+  const [loading, setLoading] = useState(true)
 
-  // TODO: API에서 결과 데이터 받기
-  const pingiTimeNumber = 3
-  const results: ResultMember[] = [
-    { memberId: '1', nickname: '민준', breed: 'retriever', level: 4, levelChange: 2 },
-    { memberId: '2', nickname: '수진', breed: 'pomeranian', level: 3, levelChange: 1, isHungry: true },
-    { memberId: '3', nickname: '지훈', breed: 'shiba', level: 2, levelChange: 0 },
-    { memberId: '4', nickname: '수아', breed: 'poodle', level: 0, levelChange: 0, isNotDrinking: true },
-  ]
+  useEffect(() => {
+    async function fetchResults() {
+      if (!code) return
+      try {
+        const room = await getRoom(code)
+        
+        // 멤버 데이터에서 결과 생성
+        const memberResults: ResultMember[] = room.members
+          .map(m => ({
+            memberId: m.id,
+            nickname: m.nickname,
+            breed: (m.breed || 'retriever') as CharacterBreed,
+            level: m.level ?? 0,
+            levelChange: 0, // 실제로는 이전 레벨과 비교해야 함
+            isHungry: (m.hungerLevel ?? 0) >= 3,
+          }))
+          .sort((a, b) => b.level - a.level)
+        
+        setResults(memberResults)
+        
+        // 핑이타임 번호는 location state에서 가져오거나 기본값 사용
+        const stateIndex = (location.state as { pingiTimeIndex?: number })?.pingiTimeIndex
+        setPingiTimeNumber(stateIndex ?? 1)
+      } catch (error) {
+        console.error('Failed to fetch results:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchResults()
+  }, [code, location.state])
 
   const winner = results[0]
   const hungryMember = results.find((r) => r.isHungry)
+
+  if (loading || !winner) {
+    return (
+      <PageTransition>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-brown-500">로딩 중...</p>
+        </div>
+      </PageTransition>
+    )
+  }
 
   return (
     <PageTransition>
@@ -61,10 +95,11 @@ export default function SessionResult() {
             showEffects 
           />
           <p className="font-display text-lg text-brown-900 mt-3">
-            {winner.nickname} ({BREEDS[winner.breed as keyof typeof BREEDS].name})
+            {winner.nickname} ({BREEDS[winner.breed as keyof typeof BREEDS]?.name || winner.breed})
           </p>
           <p className="text-sm text-ink font-bold mt-1">
-            Level {winner.level} · ▲ +{winner.levelChange} 단계
+            Level {winner.level}
+            {winner.levelChange > 0 && ` · ▲ +${winner.levelChange} 단계`}
           </p>
         </Card>
 

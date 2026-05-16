@@ -2,36 +2,103 @@
  * @file JoinSession.tsx - 방 입장 페이지
  *
  * 초대 링크(/r/:code)를 통해 방에 처음 입장할 때 표시되는 화면이다.
- * 상단에 방 정보(장소, 시간, 방장 이름)를 카드로 표시하고,
- * 참여자가 자신의 닉네임을 입력하여 방에 참가할 수 있게 한다.
- * 닉네임 입력 후 RoomContext에 멤버 정보를 저장하고 캐릭터 선택 화면으로 이동한다.
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
 import Card from '@/components/common/Card'
 import PageTransition from '@/components/layout/PageTransition'
 import { useRoom } from '@/contexts/RoomContext'
+import { getRoom, joinRoom as apiJoinRoom, setCurrentMemberId } from '@/services/api'
 
 export default function JoinSession() {
   const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
-  const { joinRoom } = useRoom()
+  const { joinRoom, setRoom, setMemberId } = useRoom()
   const [nickname, setNickname] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [joining, setJoining] = useState(false)
+  const [error, setError] = useState('')
+  const [roomInfo, setRoomInfo] = useState({
+    hostNickname: '',
+    place: '',
+    scheduledAt: '',
+    memberCount: 0,
+  })
 
-  // TODO: API에서 방 정보 불러오기
-  const roomInfo = {
-    hostNickname: '민준',
-    place: '강남역 4번출구',
-    scheduledAt: '오늘 19:30',
-    memberCount: 2,
+  useEffect(() => {
+    async function fetchRoomInfo() {
+      if (!code) return
+      try {
+        const room = await getRoom(code)
+        const host = room.members.find(m => m.isHost)
+        setRoomInfo({
+          hostNickname: host?.nickname || '방장',
+          place: room.location,
+          scheduledAt: new Date(room.scheduledAt).toLocaleString('ko-KR', {
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          memberCount: room.members.length,
+        })
+        setRoom(room)
+      } catch (err) {
+        setError('방을 찾을 수 없어요')
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchRoomInfo()
+  }, [code, setRoom])
+
+  const handleJoin = async () => {
+    if (!nickname.trim() || !code) return
+    
+    setJoining(true)
+    setError('')
+    
+    try {
+      const response = await apiJoinRoom(code, { nickname: nickname.trim() })
+      
+      // Context에 저장
+      joinRoom(code, nickname.trim(), false)
+      setMemberId(response.member.id)
+      setCurrentMemberId(response.member.id)
+      setRoom(response.room)
+      
+      navigate(`/r/${code}/character`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '입장에 실패했어요')
+    } finally {
+      setJoining(false)
+    }
   }
 
-  const handleJoin = () => {
-    if (!nickname.trim() || !code) return
-    joinRoom(code, nickname.trim())
-    navigate(`/r/${code}/character`)
+  if (loading) {
+    return (
+      <PageTransition>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-brown-500">로딩 중...</p>
+        </div>
+      </PageTransition>
+    )
+  }
+
+  if (error && !roomInfo.place) {
+    return (
+      <PageTransition>
+        <div className="flex-1 flex flex-col items-center justify-center px-5">
+          <p className="text-xl mb-4">😢</p>
+          <p className="text-brown-900 font-bold">{error}</p>
+          <Button className="mt-6" onClick={() => navigate('/')}>
+            홈으로
+          </Button>
+        </div>
+      </PageTransition>
+    )
   }
 
   return (
@@ -65,11 +132,12 @@ export default function JoinSession() {
             onChange={(e) => setNickname(e.target.value)}
             maxLength={10}
           />
+          {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
         </div>
 
         <div className="mt-auto pt-6">
-          <Button onClick={handleJoin} disabled={nickname.trim().length < 1}>
-            입장하기
+          <Button onClick={handleJoin} disabled={nickname.trim().length < 1 || joining}>
+            {joining ? '입장 중...' : '입장하기'}
           </Button>
         </div>
       </div>

@@ -1,11 +1,5 @@
 /**
  * @file ArrivalInfo.tsx - 도착 정보 입력 페이지
- *
- * 사용자가 술자리 장소에 도착할 예정 시간과 공복 상태를 입력하는 화면이다.
- * - ETA (도착 예정): 정시, 5분 지각, 10분 지각, 많이 지각 중 선택
- * - 공복도: "든든" / "공복" 선택 (공복 선택 시 결과 화면에서 경고 표시)
- * 이 정보는 대기실에서 다른 멤버들에게 공유되며,
- * 입력 완료 후 대기실(WaitingRoom)로 이동한다.
  */
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -13,18 +7,20 @@ import Button from '@/components/common/Button'
 import Card from '@/components/common/Card'
 import PageTransition from '@/components/layout/PageTransition'
 import type { HungerLevel } from '@/types/room'
+import { updateMember, getCurrentMemberId } from '@/services/api'
 
 interface HungerOption {
   value: HungerLevel
+  apiValue: number
   label: string
   warning?: boolean
 }
 
 const hungerOptions: HungerOption[] = [
-  { value: 'full', label: '방금 먹음 (배 부름)' },
-  { value: 'little', label: '좀 출출함' },
-  { value: 'hungry', label: '배고픔' },
-  { value: 'starving', label: '종일 굶음 ⚠', warning: true },
+  { value: 'full', apiValue: 0, label: '방금 먹음 (배 부름)' },
+  { value: 'little', apiValue: 1, label: '좀 출출함' },
+  { value: 'hungry', apiValue: 2, label: '배고픔' },
+  { value: 'starving', apiValue: 3, label: '종일 굶음 ⚠', warning: true },
 ]
 
 function getDefaultTime() {
@@ -38,10 +34,27 @@ export default function ArrivalInfo() {
   const navigate = useNavigate()
   const [arrivalTime, setArrivalTime] = useState(getDefaultTime())
   const [hunger, setHunger] = useState<HungerLevel | null>(null)
+  const [saving, setSaving] = useState(false)
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!hunger) return
-    navigate(`/r/${code}/lobby`)
+    
+    setSaving(true)
+    try {
+      const memberId = getCurrentMemberId()
+      if (memberId) {
+        const hungerOption = hungerOptions.find(h => h.value === hunger)
+        await updateMember(memberId, { 
+          hungerLevel: hungerOption?.apiValue ?? 0,
+        })
+      }
+      navigate(`/r/${code}/lobby`)
+    } catch (error) {
+      console.error('Failed to save arrival info:', error)
+      navigate(`/r/${code}/lobby`)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -106,8 +119,8 @@ export default function ArrivalInfo() {
         </Card>
 
         <div className="mt-auto pt-6">
-          <Button onClick={handleSubmit} disabled={!hunger}>
-            준비 완료
+          <Button onClick={handleSubmit} disabled={!hunger || saving}>
+            {saving ? '저장 중...' : '준비 완료'}
           </Button>
         </div>
       </div>

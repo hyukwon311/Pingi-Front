@@ -1,12 +1,7 @@
 /**
  * @file Awards.tsx - 시상식 페이지
- *
- * 술자리 종료 후 각 멤버에게 수여되는 다양한 상과 통계를 보여주는 화면이다.
- * 고정 4대상(주량왕, 최고 레벨, 최저 레벨, 센스왕)과
- * 조건부 뱃지(공복왕, 야식왕, 소주왕 등)가 멤버별로 표시되며,
- * 시간대별 취도 변화 그래프를 통해 술자리 동안의 취도 흐름을 한눈에 파악할 수 있다.
- * 하단의 "인스타 카드 만들기" 버튼을 누르면 결과를 이미지로 저장할 수 있다.
  */
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Button from '@/components/common/Button'
 import Card from '@/components/common/Card'
@@ -14,11 +9,21 @@ import Badge from '@/components/common/Badge'
 import Character from '@/components/common/Character'
 import PageTransition from '@/components/layout/PageTransition'
 import type { CharacterBreed } from '@/types/room'
+import { getFinalReport, getRoom, endRoom } from '@/services/api'
+import { useRoom } from '@/contexts/RoomContext'
 
 interface AwardWinner {
   nickname: string
   breed: CharacterBreed
   description: string
+}
+
+interface AwardData {
+  title: string
+  icon: string
+  label: string
+  winner: AwardWinner
+  level: number
 }
 
 interface BadgeInfo {
@@ -28,39 +33,142 @@ interface BadgeInfo {
   reason: string
 }
 
+const AWARD_CONFIG: Record<string, { title: string; icon: string; label: string }> = {
+  top_drunk: { title: '술짱', icon: '🏆', label: '오늘의 술짱' },
+  liver_guardian: { title: '간수호자', icon: '🛡️', label: '오늘의 간수호자' },
+  pacemaker: { title: '페이스메이커', icon: '😎', label: '오늘의 페이스메이커' },
+  accelerator: { title: '급발진', icon: '🚀', label: '오늘의 급발진' },
+}
+
 export default function Awards() {
   const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
+  const { currentMember } = useRoom()
+  
+  const [awards, setAwards] = useState<AwardData[]>([])
+  const [badges, setBadges] = useState<BadgeInfo[]>([])
+  const [timelineData, setTimelineData] = useState<{ time: string; levels: number[] }[]>([])
+  const [memberNames, setMemberNames] = useState<string[]>([])
+  const [sessionInfo, setSessionInfo] = useState({ date: '', place: '' })
+  const [loading, setLoading] = useState(true)
+  const [ending, setEnding] = useState(false)
 
-  // TODO: API에서 시상 데이터 받기
-  const sessionInfo = {
-    date: '2026.05.16',
-    place: '강남',
+  useEffect(() => {
+    async function fetchData() {
+      if (!code) return
+      try {
+        // 먼저 방 정보 가져오기
+        const room = await getRoom(code)
+        setSessionInfo({
+          date: new Date(room.scheduledAt).toLocaleDateString('ko-KR'),
+          place: room.location,
+        })
+        setMemberNames(room.members.map(m => m.nickname))
+        
+        // 리포트 가져오기 (방이 종료된 경우에만 실제 데이터가 있음)
+        try {
+          const report = await getFinalReport(code)
+          
+          // Awards 매핑
+          const mappedAwards: AwardData[] = report.awards.map((a, idx) => {
+            const config = AWARD_CONFIG[a.type] || { title: a.type, icon: '🎖️', label: a.type }
+            return {
+              ...config,
+              winner: {
+                nickname: a.nickname,
+                breed: (a.breed || 'retriever') as CharacterBreed,
+                description: a.description,
+              },
+              level: idx === 0 ? 5 : idx === 1 ? 1 : 3,
+            }
+          })
+          setAwards(mappedAwards)
+          
+          // Badges 매핑
+          setBadges(report.badges.map(b => ({
+            emoji: b.emoji,
+            name: b.name,
+            winner: b.winner,
+            reason: b.reason,
+          })))
+          
+          // Timeline 매핑
+          setTimelineData(report.timeline.map(t => ({
+            time: new Date(t.time).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+            levels: t.levels,
+          })))
+        } catch {
+          // 리포트가 없으면 멤버 데이터에서 생성
+          const memberAwards: AwardData[] = []
+          const sortedByLevel = [...room.members].sort((a, b) => (b.level ?? 0) - (a.level ?? 0))
+          
+          if (sortedByLevel[0]) {
+            memberAwards.push({
+              title: '술짱',
+              icon: '🏆',
+              label: '오늘의 술짱',
+              winner: {
+                nickname: sortedByLevel[0].nickname,
+                breed: (sortedByLevel[0].breed || 'retriever') as CharacterBreed,
+                description: `Level ${sortedByLevel[0].level ?? 0} 달성`,
+              },
+              level: sortedByLevel[0].level ?? 0,
+            })
+          }
+          
+          const lowestLevel = sortedByLevel[sortedByLevel.length - 1]
+          if (lowestLevel && lowestLevel.id !== sortedByLevel[0]?.id) {
+            memberAwards.push({
+              title: '간수호자',
+              icon: '🛡️',
+              label: '오늘의 간수호자',
+              winner: {
+                nickname: lowestLevel.nickname,
+                breed: (lowestLevel.breed || 'retriever') as CharacterBreed,
+                description: `Level ${lowestLevel.level ?? 0} 유지`,
+              },
+              level: lowestLevel.level ?? 0,
+            })
+          }
+          
+          setAwards(memberAwards)
+        }
+      } catch (error) {
+        console.error('Failed to fetch awards:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [code])
+
+  const handleEndSession = async () => {
+    if (!code || !currentMember?.isHost) return
+    setEnding(true)
+    try {
+      await endRoom(code)
+      // 리포트 새로 가져오기
+      const report = await getFinalReport(code)
+      // 페이지 새로고침하여 데이터 업데이트
+      window.location.reload()
+    } catch (error) {
+      console.error('Failed to end session:', error)
+    } finally {
+      setEnding(false)
+    }
   }
 
-  const awards: { title: string; icon: string; label: string; winner: AwardWinner }[] = [
-    { title: '술짱', icon: '🏆', label: '오늘의 술짱', winner: { nickname: '민준', breed: 'retriever', description: 'Level 5 달성' } },
-    { title: '간수호자', icon: '🛡️', label: '오늘의 간수호자', winner: { nickname: '수아', breed: 'poodle', description: '끝까지 Level 1 사수' } },
-    { title: '페이스메이커', icon: '😎', label: '오늘의 페이스메이커', winner: { nickname: '지훈', breed: 'shiba', description: 'Level 3에서 멈춤' } },
-    { title: '급발진', icon: '🚀', label: '오늘의 급발진', winner: { nickname: '수진', breed: 'pomeranian', description: '레벨 상승 속도 1위' } },
-  ]
-
-  const badges: BadgeInfo[] = [
-    { emoji: '🫠', name: '알쓰', winner: '민준', reason: '첫 핑이타임 L2' },
-    { emoji: '🚂', name: '폭주기관차', winner: '민준', reason: '3회차 +2' },
-    { emoji: '💀', name: '공복전사', winner: '수진', reason: '공복 + L3 도달' },
-  ]
-
-  // 시간별 레벨 데이터 (간단한 시각화)
-  const timelineData = [
-    { time: '19:30', levels: [0, 0, 0, 0] },
-    { time: '20:00', levels: [1, 1, 0, 0] },
-    { time: '20:30', levels: [2, 2, 1, 0] },
-    { time: '21:00', levels: [4, 3, 2, 1] },
-    { time: '21:30', levels: [5, 4, 3, 1] },
-  ]
-
   const levelColors = ['bg-lv-0', 'bg-lv-1', 'bg-lv-2', 'bg-lv-3', 'bg-lv-4', 'bg-lv-5']
+
+  if (loading) {
+    return (
+      <PageTransition>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-brown-500">로딩 중...</p>
+        </div>
+      </PageTransition>
+    )
+  }
 
   return (
     <PageTransition>
@@ -77,76 +185,85 @@ export default function Awards() {
         <div className="divider" />
 
         {/* 4개 고정상 */}
-        <div className="grid grid-cols-2 gap-3">
-          {awards.map((award, idx) => (
-            <Card key={award.title} className="text-center" highlight={idx === 0}>
-              <p className="text-xs text-brown-500 mb-1">
-                {award.icon} {award.label}
-              </p>
-              <Character
-                breed={award.winner.breed}
-                level={idx === 0 ? 5 : idx === 1 ? 1 : 3}
-                size="sm"
-                showEffects={idx === 0}
-              />
-              <p className="font-display text-sm text-brown-900 mt-2">
-                {award.winner.nickname}
-              </p>
-              <p className="text-[10px] text-brown-400 mt-0.5">
-                {award.winner.description}
-              </p>
-            </Card>
-          ))}
-        </div>
-
-        <div className="divider" />
-
-        {/* 뱃지 */}
-        <div>
-          <p className="text-sm font-bold text-brown-900 mb-2">🎖 획득 뱃지</p>
-          <div className="flex flex-wrap gap-2">
-            {badges.map((b) => (
-              <Badge key={b.name} variant="highlight">
-                {b.emoji} {b.name}: {b.winner}
-              </Badge>
+        {awards.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3">
+            {awards.map((award, idx) => (
+              <Card key={award.title} className="text-center" highlight={idx === 0}>
+                <p className="text-xs text-brown-500 mb-1">
+                  {award.icon} {award.label}
+                </p>
+                <Character
+                  breed={award.winner.breed}
+                  level={Math.min(award.level, 5) as 0|1|2|3|4|5}
+                  size="sm"
+                  showEffects={idx === 0}
+                />
+                <p className="font-display text-sm text-brown-900 mt-2">
+                  {award.winner.nickname}
+                </p>
+                <p className="text-[10px] text-brown-400 mt-0.5">
+                  {award.winner.description}
+                </p>
+              </Card>
             ))}
           </div>
-        </div>
+        ) : (
+          <Card className="text-center py-8">
+            <p className="text-brown-500">아직 결과가 없어요</p>
+          </Card>
+        )}
 
-        <div className="divider" />
-
-        {/* 시간별 그래프 */}
-        <div>
-          <p className="text-sm font-bold text-brown-900 mb-3">📈 시간별 그래프</p>
-          <Card>
-            <div className="flex justify-between text-[10px] text-brown-400 mb-2">
-              {timelineData.map((t) => (
-                <span key={t.time}>{t.time}</span>
-              ))}
+        {badges.length > 0 && (
+          <>
+            <div className="divider" />
+            <div>
+              <p className="text-sm font-bold text-brown-900 mb-2">🎖 획득 뱃지</p>
+              <div className="flex flex-wrap gap-2">
+                {badges.map((b) => (
+                  <Badge key={b.name} variant="highlight">
+                    {b.emoji} {b.name}: {b.winner}
+                  </Badge>
+                ))}
+              </div>
             </div>
-            <div className="h-24 flex items-end justify-between gap-1">
-              {timelineData.map((t, i) => (
-                <div key={i} className="flex-1 flex items-end justify-center gap-0.5">
-                  {t.levels.map((lv, j) => (
-                    <div
-                      key={j}
-                      className={`w-2 rounded-t ${levelColors[lv]}`}
-                      style={{ height: `${((lv + 1) / 6) * 100}%` }}
-                    />
+          </>
+        )}
+
+        {timelineData.length > 0 && (
+          <>
+            <div className="divider" />
+            <div>
+              <p className="text-sm font-bold text-brown-900 mb-3">📈 시간별 그래프</p>
+              <Card>
+                <div className="flex justify-between text-[10px] text-brown-400 mb-2">
+                  {timelineData.map((t) => (
+                    <span key={t.time}>{t.time}</span>
                   ))}
                 </div>
-              ))}
+                <div className="h-24 flex items-end justify-between gap-1">
+                  {timelineData.map((t, i) => (
+                    <div key={i} className="flex-1 flex items-end justify-center gap-0.5">
+                      {t.levels.map((lv, j) => (
+                        <div
+                          key={j}
+                          className={`w-2 rounded-t ${levelColors[Math.min(lv, 5)]}`}
+                          style={{ height: `${((lv + 1) / 6) * 100}%` }}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-center gap-2 mt-3 text-[9px] text-brown-400">
+                  {memberNames.map((name, i) => (
+                    <span key={i}>🐶 {name}</span>
+                  ))}
+                </div>
+              </Card>
             </div>
-            <div className="flex justify-center gap-2 mt-3 text-[9px] text-brown-400">
-              <span>🐶 민준</span>
-              <span>🐶 수진</span>
-              <span>🐶 지훈</span>
-              <span>🐶 수아</span>
-            </div>
-          </Card>
-        </div>
+          </>
+        )}
 
-        <div className="mt-auto pt-6">
+        <div className="mt-auto pt-6 flex flex-col gap-3">
           <Button onClick={() => navigate(`/r/${code}/share`)}>
             📸 인스타 카드 만들기
           </Button>
