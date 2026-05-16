@@ -1,55 +1,43 @@
+/* ─── Google Fonts ─── */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Jua&display=swap");
+
 @import "tailwindcss";
 
 @theme {
-  /* ── Blur Scale ─────────────────────── */
-  --color-pingi-50: #EBF2FF;
-  --color-pingi-100: #D4E4FF;
-  --color-pingi-200: #A8C8FF;
-  --color-pingi-300: #7DAFFF;
-  --color-pingi-400: #5196FB;
-  --color-pingi-500: #3182F7;
-  --color-pingi-600: #0064FF;
-  --color-pingi-700: #0050D6;
+  /* ─── 기본 팔레트 ─── */
+  --color-paper: #fdf8ec;
+  --color-grid: #ece2c8;
+  --color-ink: #da291c;
+  --color-highlight: #ffd166;
 
-  /* ── Grey Scale ──────────────────────────────── */
-  --color-grey-50: #FAFBFC;
-  --color-grey-100: #F7F8FA;
-  --color-grey-200: #E5E8EB;
-  --color-grey-300: #D1D6DB;
-  --color-grey-400: #B0B8C1;
-  --color-grey-500: #8B95A1;
-  --color-grey-600: #6B7684;
-  --color-grey-700: #4E5968;
-  --color-grey-800: #333D4B;
-  --color-grey-900: #191F28;
+  /* ─── 브라운 스케일 ─── */
+  --color-brown-900: #2a1a0a;
+  --color-brown-500: #8a7a5a;
+  --color-brown-400: #b0a080;
+  --color-brown-300: #d4c4a0;
 
-  /* ── 취도 레벨 컬러 (5단계) ──────────────────────────── */
-  --color-drunk-1: #03B26C;
-  --color-drunk-2: #5CC98C;
-  --color-drunk-3: #FE9800;
-  --color-drunk-4: #F45452;
-  --color-drunk-5: #E8344E;
+  /* ─── 시맨틱 컬러 ─── */
+  --color-danger: #e74c3c;
+  --color-success: #27ae60;
+  --color-warning: #e67e22;
 
-  /* ── 시맨틱 컬러 ─────────────────────────────────────── */
-  --color-surface: #F2F4F6;
-  --color-surface-alt: #F9FAFB;
-  --color-border: #E5E8EB;
-  --color-divider: #E5E8EB;
-  --color-disabled: #D1D6DB;
-  --color-text-primary: #191F28;
-  --color-text-secondary: #8B95A1;
-  --color-text-tertiary: #B0B8C1;
+  /* ─── 레벨별 컬러 ─── */
+  --color-lv-0: #27ae60;
+  --color-lv-1: #8a7a5a;
+  --color-lv-2: #ffd166;
+  --color-lv-3: #e67e22;
+  --color-lv-4: #da291c;
+  --color-lv-5: #2a1a0a;
 
-  /* ── 상태 컬러 (TDS) ──────────────────────────────── */
-  --color-status-success: #03B26C;
-  --color-status-warning: #FE9800;
-  --color-status-danger: #E8344E;
+  /* ─── 폰트 ─── */
+  --font-display: "Jua", sans-serif;
+  --font-sans: "Inter", sans-serif;
 
-  /* ── 폰트 ───────────────────────────────────────────── */
-  --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
-    system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo',
-    'Noto Sans KR', 'Malgun Gothic', 'Apple Color Emoji', 'Segoe UI Emoji',
-    'Segoe UI Symbol', sans-serif;
+  /* ─── 그림자 ─── */
+  --shadow-card: 0 2px 8px rgba(42, 26, 10, 0.06);
+
+  /* ─── 보더 ─── */
+  --border-width-3: 3px;
 }
 
 @layer base {
@@ -67,8 +55,8 @@
   }
 
   body {
-    background: var(--color-grey-100);
-    color: var(--color-grey-900);
+    background: var(--color-paper);
+    color: var(--color-brown-900);
     min-height: 100dvh;
   }
 
@@ -77,23 +65,53 @@
     margin: 0 auto;
     min-height: 100dvh;
     position: relative;
-    background: var(--color-grey-100);
+    background: var(--color-paper);
   }
 }
 
+/* ─── 종이 격자 배경 ─── */
+.bg-paper-grid {
+  background-color: #fdf8ec;
+  background-image: linear-gradient(#ece2c8 1px, transparent 1px),
+    linear-gradient(90deg, #ece2c8 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ─── 점선 구분선 ─── */
+.divider {
+  border-top: 2px dashed var(--color-brown-300);
+  margin: 0.75rem 0;
+}
+
+/* ─── 기존 애니메이션 유지 ─── */
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes slide-up {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 
 @keyframes pulse-soft {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
 }
 
 .animate-fade-in {
@@ -108,15 +126,118 @@
   animation: pulse-soft 1.5s ease-in-out infinite;
 }
 
-@keyframes tab-underline {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
+/* ─── 새 애니메이션: 취도 흔들림 ─── */
+@keyframes wobble-soft {
+  0%,
+  100% {
+    transform: rotate(-1.5deg);
+  }
+  50% {
+    transform: rotate(1.5deg);
+  }
 }
 
-.animate-tab-underline {
-  animation: tab-underline 0.2s cubic-bezier(0.33, 1, 0.68, 1);
+@keyframes wobble-mid {
+  0%,
+  100% {
+    transform: rotate(-3deg) translateY(0);
+  }
+  33% {
+    transform: rotate(2deg) translateY(-1px);
+  }
+  66% {
+    transform: rotate(-2deg) translateY(1px);
+  }
 }
 
+@keyframes wobble-hard {
+  0%,
+  100% {
+    transform: rotate(-5deg) translate(-1px, 0);
+  }
+  25% {
+    transform: rotate(4deg) translate(2px, -2px);
+  }
+  75% {
+    transform: rotate(5deg) translate(1px, -1px);
+  }
+}
+
+.animate-wobble-soft {
+  animation: wobble-soft 2.2s ease-in-out infinite;
+}
+
+.animate-wobble-mid {
+  animation: wobble-mid 1.5s ease-in-out infinite;
+}
+
+.animate-wobble-hard {
+  animation: wobble-hard 1.2s ease-in-out infinite;
+}
+
+/* ─── 새 애니메이션: 플로팅 이펙트 ─── */
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+.animate-float {
+  animation: float 2s ease-in-out infinite;
+}
+
+/* ─── 새 애니메이션: 녹음 점멸 ─── */
+@keyframes blink-rec {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.animate-blink-rec {
+  animation: blink-rec 1s infinite;
+}
+
+/* ─── 새 애니메이션: 웨이브 바 ─── */
+@keyframes wave-bar {
+  0%,
+  100% {
+    height: 12px;
+  }
+  50% {
+    height: 28px;
+  }
+}
+
+.animate-wave-bar {
+  animation: wave-bar 0.8s ease-in-out infinite;
+}
+
+/* ─── 새 애니메이션: 펄스 ─── */
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+.animate-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* ─── Safe Area ─── */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
