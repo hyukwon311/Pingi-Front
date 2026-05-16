@@ -1,65 +1,101 @@
 /**
- * @file VoiceRecording.tsx - 발음 테스트 녹음 페이지
+ * @file VoiceRecording.tsx - 핑이타임 녹음 페이지
  *
- * 술자리 진행 중 30분마다 발음 테스트를 수행하는 전체 화면 녹음 UI.
- * 보라색 그라데이션 배경에 음성 파형 시각화와 녹음 버튼이 표시된다.
- * 녹음 완료 또는 X 버튼 클릭 시 세션 대시보드로 돌아간다.
+ * 핑이타임(발음 테스트) 시 현재 발음 상태를 측정하는 녹음 화면이다.
+ * 화면 중앙에 빨간 테두리 모달이 표시되고, 그 안에 측정용 잰말 문장이 카드로 나타난다.
+ * "녹음 시작" 버튼을 누르면 5초간 녹음이 진행되며,
+ * 실시간 파형, 녹음 시간, 프로그레스바가 표시되어 진행 상황을 확인할 수 있다.
+ * 녹음 완료 후 음성 데이터를 서버로 전송하여 베이스라인과 비교 분석하고,
+ * 결과 화면(SessionResult)으로 이동한다.
  */
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import Button from '@/components/common/Button'
 import VoiceWaveform from '@/components/voice/VoiceWaveform'
+import ProgressBar from '@/components/common/ProgressBar'
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder'
 import { BASELINE_SENTENCES } from '@/constants/sentences'
 
 export default function VoiceRecording() {
-  const { id } = useParams()
+  const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
-  const { isRecording, startRecording, stopRecording } = useVoiceRecorder()
+  const [recordSeconds, setRecordSeconds] = useState(0)
+  const [isComplete, setIsComplete] = useState(false)
+  const { isRecording, startRecording, stopRecording, resetRecording } = useVoiceRecorder()
 
-  const sentence = BASELINE_SENTENCES[0]
+  const sentence = BASELINE_SENTENCES[Math.floor(Math.random() * BASELINE_SENTENCES.length)]
 
-  const handleStop = () => {
-    stopRecording()
-    navigate(`/session/${id}`)
+  const handleStartRecording = () => {
+    setRecordSeconds(0)
+    startRecording()
   }
 
+  const handleStopRecording = () => {
+    stopRecording()
+    resetRecording()
+    setIsComplete(true)
+    setTimeout(() => {
+      navigate(`/r/${code}/result`)
+    }, 1500)
+  }
+
+  useEffect(() => {
+    if (!isRecording) return
+
+    const timer = setInterval(() => {
+      setRecordSeconds((s) => s + 1)
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [isRecording])
+
   return (
-    <div className="flex flex-col min-h-dvh bg-gradient-to-b from-pingi-500 to-pingi-600">
-      <div className="flex-1 flex flex-col items-center justify-center gap-8 px-8">
-        <VoiceWaveform isActive={isRecording} />
-        <p className="text-white text-[18px] font-medium">
-          {isRecording ? '듣고 있어요' : '준비되셨나요?'}
-        </p>
-        <p className="text-white/70 text-[14px] text-center leading-relaxed">
-          "{sentence}"
-        </p>
-      </div>
+    <div className="flex-1 flex items-center justify-center px-5 py-10">
+      {/* 모달 */}
+      <div className="w-full max-w-sm bg-paper rounded-3xl border-3 border-ink p-6 shadow-lg">
+        {isComplete ? (
+          <div className="text-center py-8">
+            <div className="text-5xl mb-4">✅</div>
+            <p className="font-display text-xl text-brown-900">녹음 완료!</p>
+            <p className="text-sm text-brown-500 mt-2">분석 중...</p>
+          </div>
+        ) : (
+          <>
+            <div className="text-center mb-6">
+              <h1 className="font-display text-xl text-ink">
+                🎙 지금 따라 읽으세요
+              </h1>
+            </div>
 
-      <div className="flex items-center justify-between px-8 pb-10">
-        <button
-          onClick={isRecording ? handleStop : startRecording}
-          className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center active:bg-white/30 transition-colors"
-        >
-          {isRecording ? (
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="white">
-              <rect x="3" y="2" width="5" height="16" rx="1" />
-              <rect x="12" y="2" width="5" height="16" rx="1" />
-            </svg>
-          ) : (
-            <svg width="20" height="24" viewBox="0 0 24 24" fill="none" className="text-white">
-              <path d="M12 1a4 4 0 0 0-4 4v7a4 4 0 0 0 8 0V5a4 4 0 0 0-4-4Z" fill="currentColor" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4m-3 0h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-        </button>
+            <div className="bg-white rounded-2xl p-4 mb-6 shadow-card">
+              <p className="font-display text-base text-brown-900 text-center leading-relaxed">
+                "{sentence}"
+              </p>
+            </div>
 
-        <button
-          onClick={() => navigate(`/session/${id}`)}
-          className="w-14 h-14 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center active:bg-white/30 transition-colors"
-        >
-          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-            <path d="M1 1l16 16M17 1L1 17" stroke="white" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </button>
+            <div className="flex flex-col items-center gap-4 mb-6">
+              <VoiceWaveform active={isRecording} />
+              
+              <div className="flex items-center gap-2">
+                <span className={`w-3 h-3 rounded-full ${isRecording ? 'bg-ink animate-pulse' : 'bg-brown-300'}`} />
+                <span className="font-display text-lg text-brown-900">
+                  {recordSeconds}초 / 5초
+                </span>
+              </div>
+
+              <div className="w-full">
+                <ProgressBar percent={Math.min((recordSeconds / 5) * 100, 100)} />
+              </div>
+            </div>
+
+            <Button
+              variant={isRecording ? 'secondary' : 'primary'}
+              onClick={isRecording ? handleStopRecording : handleStartRecording}
+            >
+              {isRecording ? '⏹ 녹음 종료' : '🔴 녹음 시작'}
+            </Button>
+          </>
+        )}
       </div>
     </div>
   )
