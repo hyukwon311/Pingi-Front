@@ -18,7 +18,6 @@ interface SessionListCardProps {
 const statusConfig: Record<Session['status'], { color: string; bg: string; label: string }> = {
   active: { color: 'text-status-success', bg: 'bg-[#E8F5E9]', label: '진행중' },
   waiting: { color: 'text-pingi-500', bg: 'bg-pingi-50', label: '대기중' },
-  baseline: { color: 'text-status-warning', bg: 'bg-[#FFF3E0]', label: '측정중' },
   finished: { color: 'text-grey-500', bg: 'bg-grey-100', label: '종료' },
 }
 
@@ -37,12 +36,6 @@ function SessionStatusIcon({ status }: { status: Session['status'] }) {
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
           <circle cx="12" cy="12" r="9" stroke="var(--color-pingi-500)" strokeWidth="2" />
           <path d="M12 7v5l3 2" stroke="var(--color-pingi-500)" strokeWidth="2" strokeLinecap="round" />
-        </svg>
-      )}
-      {status === 'baseline' && (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2a3 3 0 00-3 3v6a3 3 0 006 0V5a3 3 0 00-3-3z" fill="var(--color-status-warning)" />
-          <path d="M19 10v1a7 7 0 01-14 0v-1" stroke="var(--color-status-warning)" strokeWidth="2" strokeLinecap="round" />
         </svg>
       )}
       {status === 'finished' && (

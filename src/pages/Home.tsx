@@ -35,9 +35,9 @@ const mockSessions: Session[] = [
     inviteCode: 'ABC123',
     status: 'active',
     participants: [
-      { user: { id: '1', nickname: '나' }, drunkLevel: 1, drinkCount: 2, isReady: true, levelHistory: [] },
-      { user: { id: '2', nickname: '친구1' }, drunkLevel: 2, drinkCount: 3, isReady: true, levelHistory: [] },
-      { user: { id: '3', nickname: '친구2' }, drunkLevel: 1, drinkCount: 1, isReady: true, levelHistory: [] },
+      { user: { id: '1', nickname: '나' }, drunkLevel: 1, drinkCount: 2, baselineCompleted: true, levelHistory: [] },
+      { user: { id: '2', nickname: '친구1' }, drunkLevel: 2, drinkCount: 3, baselineCompleted: true, levelHistory: [] },
+      { user: { id: '3', nickname: '친구2' }, drunkLevel: 1, drinkCount: 1, baselineCompleted: true, levelHistory: [] },
     ],
     createdAt: Date.now() - 3600000,
     startedAt: Date.now() - 1800000,
@@ -49,8 +49,8 @@ const mockSessions: Session[] = [
     inviteCode: 'DEF456',
     status: 'waiting',
     participants: [
-      { user: { id: '1', nickname: '나' }, drunkLevel: 0, drinkCount: 0, isReady: false, levelHistory: [] },
-      { user: { id: '4', nickname: '동기1' }, drunkLevel: 0, drinkCount: 0, isReady: true, levelHistory: [] },
+      { user: { id: '1', nickname: '나' }, drunkLevel: 0, drinkCount: 0, baselineCompleted: false, levelHistory: [] },
+      { user: { id: '4', nickname: '동기1' }, drunkLevel: 0, drinkCount: 0, baselineCompleted: true, levelHistory: [] },
     ],
     createdAt: Date.now() - 600000,
   },
@@ -61,8 +61,8 @@ const mockSessions: Session[] = [
     inviteCode: 'GHI789',
     status: 'finished',
     participants: [
-      { user: { id: '1', nickname: '나' }, drunkLevel: 3, drinkCount: 5, isReady: true, levelHistory: [] },
-      { user: { id: '5', nickname: '친구3' }, drunkLevel: 2, drinkCount: 4, isReady: true, levelHistory: [] },
+      { user: { id: '1', nickname: '나' }, drunkLevel: 3, drinkCount: 5, baselineCompleted: true, levelHistory: [] },
+      { user: { id: '5', nickname: '친구3' }, drunkLevel: 2, drinkCount: 4, baselineCompleted: true, levelHistory: [] },
     ],
     createdAt: Date.now() - 86400000 * 7,
     startedAt: Date.now() - 86400000 * 7,
@@ -74,7 +74,7 @@ const mockSessions: Session[] = [
 function filterSessions(sessions: Session[], tabIndex: number): Session[] {
   switch (tabIndex) {
     case 1: return sessions.filter((s) => s.status === 'waiting')
-    case 2: return sessions.filter((s) => s.status === 'active' || s.status === 'baseline')
+    case 2: return sessions.filter((s) => s.status === 'active')
     default: return sessions
   }
 }

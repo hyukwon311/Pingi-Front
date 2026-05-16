@@ -16,6 +16,7 @@ type SessionAction =
   | { type: 'SET_SESSION'; payload: Session }               // 세션 전체 데이터 설정
   | { type: 'UPDATE_PARTICIPANT'; payload: Participant }     // 특정 참가자 정보 갱신
   | { type: 'UPDATE_DRINK_COUNT'; payload: { userId: string; count: number } }  // 음주량 변경
+  | { type: 'COMPLETE_BASELINE'; payload: { userId: string } }  // baseline 측정 완료 → 준비 완료 처리
   | { type: 'CLEAR' }                                       // 세션 초기화 (퇴장 시)
 
 interface SessionState {
@@ -50,6 +51,18 @@ function reducer(state: SessionState, action: SessionAction): SessionState {
           participants: state.session.participants.map((p) =>
             p.user.id === action.payload.userId
               ? { ...p, drinkCount: Math.max(0, action.payload.count) }
+              : p,
+          ),
+        },
+      }
+    case 'COMPLETE_BASELINE':
+      if (!state.session) return state
+      return {
+        session: {
+          ...state.session,
+          participants: state.session.participants.map((p) =>
+            p.user.id === action.payload.userId
+              ? { ...p, baselineCompleted: true }
               : p,
           ),
         },

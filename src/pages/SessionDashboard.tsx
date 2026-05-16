@@ -26,14 +26,14 @@ const mockParticipants: Participant[] = [
     user: { id: '1', nickname: '나' },
     drunkLevel: 1,
     drinkCount: 0,
-    isReady: true,
+    baselineCompleted: true,
     levelHistory: [{ timestamp: Date.now(), level: 1 }],
   },
   {
     user: { id: '2', nickname: '친구1' },
     drunkLevel: 2,
     drinkCount: 3,
-    isReady: true,
+    baselineCompleted: true,
     levelHistory: [
       { timestamp: Date.now() - 1800000, level: 1 },
       { timestamp: Date.now(), level: 2 },
@@ -43,7 +43,7 @@ const mockParticipants: Participant[] = [
     user: { id: '3', nickname: '친구2' },
     drunkLevel: 3,
     drinkCount: 5,
-    isReady: true,
+    baselineCompleted: true,
     levelHistory: [
       { timestamp: Date.now() - 3600000, level: 1 },
       { timestamp: Date.now() - 1800000, level: 2 },
