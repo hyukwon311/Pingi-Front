@@ -1,15 +1,14 @@
 /**
- * @file websocket.ts - WebSocket 서비스
+ * @file websocket.ts - WebSocket 서비스 (Socket.io 클라이언트)
  *
- * 술자리 진행 중 실시간 이벤트를 수신하기 위한 WebSocket 연결을 관리하는 서비스다.
+ * 술자리 진행 중 실시간 이벤트를 수신하기 위한 Socket.io 연결을 관리하는 서비스다.
  * connect() 함수로 서버와 WebSocket 연결을 수립하고,
  * on() 함수로 이벤트 타입별 핸들러를 등록하여 멤버 입장, 핑이타임 발동 등의 이벤트를 처리한다.
- * 연결이 끊어지면 자동으로 재연결을 시도하며, 주기적으로 핑(ping) 메시지를 전송하여 연결 상태를 유지한다.
- * SessionContext에서 이 서비스를 사용하여 실시간 상태 동기화를 구현한다.
- * 환경 변수(VITE_WS_URL)로 WebSocket 엔드포인트를 설정할 수 있다.
  */
 
-const WS_BASE = import.meta.env.VITE_WS_URL || 'wss://api.pingi.app/v1/ws';
+import { io, Socket } from 'socket.io-client'
+
+const WS_BASE = import.meta.env.VITE_WS_URL || 'http://localhost:8000'
 
 export type WebSocketEventType =
   | 'member_joined'
@@ -18,141 +17,123 @@ export type WebSocketEventType =
   | 'member_late'
   | 'room_started'
   | 'baseline_progress'
+  | 'all_baseline_complete'
   | 'pingi_time_started'
   | 'recording_progress'
   | 'checkpoint_result'
   | 'room_ended'
   | 'home_checkin_started'
-  | 'home_checkin_result';
+  | 'home_checkin_result'
 
 export interface WebSocketMessage<T = unknown> {
-  type: WebSocketEventType;
-  payload: T;
-  timestamp: string;
+  type: WebSocketEventType
+  payload: T
+  timestamp: string
 }
 
-type EventHandler<T = unknown> = (payload: T) => void;
+type EventHandler<T = unknown> = (payload: T) => void
 
 class PingiWebSocket {
-  private ws: WebSocket | null = null;
-  private roomCode: string | null = null;
-  private token: string | null = null;
-  private handlers: Map<WebSocketEventType, Set<EventHandler>> = new Map();
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private reconnectDelay = 1000;
-  private pingInterval: number | null = null;
+  private socket: Socket | null = null
+  private roomCode: string | null = null
+  private token: string | null = null
+  private handlers: Map<WebSocketEventType, Set<EventHandler>> = new Map()
 
-  /** WebSocket 연결 */
+  /** Socket.io 연결 */
   connect(roomCode: string, token: string): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.disconnect();
+    if (this.socket?.connected) {
+      this.disconnect()
     }
 
-    this.roomCode = roomCode;
-    this.token = token;
+    this.roomCode = roomCode
+    this.token = token
 
-    const url = `${WS_BASE}?room=${roomCode}&token=${token}`;
-    this.ws = new WebSocket(url);
+    this.socket = io(WS_BASE, {
+      path: '/v1/ws',
+      query: { room: roomCode, token },
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    })
 
-    this.ws.onopen = () => {
-      console.log('[WS] Connected');
-      this.reconnectAttempts = 0;
-      this.startPing();
-    };
+    this.socket.on('connect', () => {
+      console.log('[WS] Connected to Socket.io')
+      // 방 채널에 조인
+      this.socket?.emit('join_room', roomCode)
+    })
 
-    this.ws.onmessage = (event) => {
-      try {
-        const message: WebSocketMessage = JSON.parse(event.data);
-        this.handleMessage(message);
-      } catch (e) {
-        console.error('[WS] Parse error:', e);
-      }
-    };
+    this.socket.on('disconnect', (reason) => {
+      console.log('[WS] Disconnected:', reason)
+    })
 
-    this.ws.onclose = () => {
-      console.log('[WS] Disconnected');
-      this.stopPing();
-      this.attemptReconnect();
-    };
+    this.socket.on('connect_error', (error) => {
+      console.error('[WS] Connection error:', error.message)
+    })
 
-    this.ws.onerror = (error) => {
-      console.error('[WS] Error:', error);
-    };
+    // 서버에서 오는 이벤트들 수신
+    const eventTypes: WebSocketEventType[] = [
+      'member_joined',
+      'member_updated',
+      'member_eta_updated',
+      'member_late',
+      'room_started',
+      'baseline_progress',
+      'all_baseline_complete',
+      'pingi_time_started',
+      'recording_progress',
+      'checkpoint_result',
+      'room_ended',
+      'home_checkin_started',
+      'home_checkin_result',
+    ]
+
+    eventTypes.forEach((eventType) => {
+      this.socket?.on(eventType, (payload: unknown) => {
+        console.log(`[WS] Received ${eventType}:`, payload)
+        const handlers = this.handlers.get(eventType)
+        if (handlers) {
+          handlers.forEach((handler) => handler(payload))
+        }
+      })
+    })
   }
 
   /** 연결 해제 */
   disconnect(): void {
-    this.stopPing();
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
+    if (this.socket) {
+      this.socket.disconnect()
+      this.socket = null
     }
-    this.roomCode = null;
-    this.token = null;
-    this.reconnectAttempts = 0;
+    this.roomCode = null
+    this.token = null
   }
 
   /** 이벤트 핸들러 등록 */
   on<T = unknown>(type: WebSocketEventType, handler: EventHandler<T>): () => void {
     if (!this.handlers.has(type)) {
-      this.handlers.set(type, new Set());
+      this.handlers.set(type, new Set())
     }
-    this.handlers.get(type)!.add(handler as EventHandler);
+    this.handlers.get(type)!.add(handler as EventHandler)
 
     // 정리 함수 반환
     return () => {
-      this.handlers.get(type)?.delete(handler as EventHandler);
-    };
+      this.handlers.get(type)?.delete(handler as EventHandler)
+    }
   }
 
   /** 메시지 전송 */
   send(type: string, payload?: unknown): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type, payload }));
+    if (this.socket?.connected) {
+      this.socket.emit(type, payload)
     }
   }
 
-  private handleMessage(message: WebSocketMessage): void {
-    const handlers = this.handlers.get(message.type);
-    if (handlers) {
-      handlers.forEach((handler) => handler(message.payload));
-    }
-  }
-
-  private startPing(): void {
-    this.pingInterval = window.setInterval(() => {
-      this.send('ping');
-    }, 30000);
-  }
-
-  private stopPing(): void {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-    }
-  }
-
-  private attemptReconnect(): void {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.log('[WS] Max reconnect attempts reached');
-      return;
-    }
-
-    if (!this.roomCode || !this.token) return;
-
-    this.reconnectAttempts++;
-    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
-    
-    console.log(`[WS] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
-    
-    setTimeout(() => {
-      if (this.roomCode && this.token) {
-        this.connect(this.roomCode, this.token);
-      }
-    }, delay);
+  /** 연결 상태 확인 */
+  isConnected(): boolean {
+    return this.socket?.connected ?? false
   }
 }
 
 // 싱글톤 인스턴스
-export const pingiWS = new PingiWebSocket();
+export const pingiWS = new PingiWebSocket()

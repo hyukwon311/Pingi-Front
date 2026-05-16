@@ -1,11 +1,5 @@
 /**
  * @file CreateSession.tsx - 방 만들기 페이지
- *
- * 새로운 술자리 방을 생성하는 화면으로, 방장이 다음 정보를 입력한다:
- * - 장소: 술자리 위치 (예: "홍대 포차")
- * - 약속 시간: 모임 시작 시간 (datetime-local input)
- * - 닉네임: 방장의 이름
- * 입력 완료 후 API를 통해 방을 생성하고, 고유 방 코드를 받아 캐릭터 선택 화면으로 이동한다.
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -14,31 +8,60 @@ import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
 import PageTransition from '@/components/layout/PageTransition'
 import { useRoom } from '@/contexts/RoomContext'
+import { createRoom, setCurrentMemberId } from '@/services/api'
 
-function generateCode() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase()
+function getDefaultDateTime() {
+  const now = new Date()
+  now.setHours(19, 30, 0, 0)
+  return now
 }
 
 function getDefaultTime() {
-  const now = new Date()
-  now.setHours(19, 30, 0, 0)
-  return now.toTimeString().slice(0, 5)
+  return getDefaultDateTime().toTimeString().slice(0, 5)
 }
 
 export default function CreateSession() {
   const navigate = useNavigate()
-  const { joinRoom } = useRoom()
+  const { joinRoom, setRoom, setMemberId } = useRoom()
   const [place, setPlace] = useState('')
   const [time, setTime] = useState(getDefaultTime())
   const [nickname, setNickname] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState('')
 
   const isValid = place.trim().length > 0 && nickname.trim().length > 0
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!isValid) return
-    const code = generateCode()
-    joinRoom(code, nickname.trim(), true)
-    navigate(`/r/${code}/lobby`)
+    
+    setCreating(true)
+    setError('')
+    
+    try {
+      // 시간을 오늘 날짜와 결합
+      const [hours, minutes] = time.split(':').map(Number)
+      const scheduledAt = new Date()
+      scheduledAt.setHours(hours ?? 19, minutes ?? 30, 0, 0)
+      
+      const response = await createRoom({
+        hostNickname: nickname.trim(),
+        location: place.trim(),
+        scheduledAt: scheduledAt.toISOString(),
+      })
+      
+      // Context에 저장
+      joinRoom(response.room.code, nickname.trim(), true)
+      setMemberId(response.host.id)
+      setCurrentMemberId(response.host.id)
+      setRoom(response.room)
+      
+      // 캐릭터 선택 화면으로 이동
+      navigate(`/r/${response.room.code}/character`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '방 생성에 실패했어요')
+    } finally {
+      setCreating(false)
+    }
   }
 
   return (
@@ -73,11 +96,15 @@ export default function CreateSession() {
             onChange={(e) => setNickname(e.target.value)}
             maxLength={10}
           />
+          
+          {error && (
+            <p className="text-xs text-red-500">{error}</p>
+          )}
         </div>
 
         <div className="mt-auto pt-6">
-          <Button onClick={handleCreate} disabled={!isValid}>
-            방 만들기
+          <Button onClick={handleCreate} disabled={!isValid || creating}>
+            {creating ? '생성 중...' : '방 만들기'}
           </Button>
         </div>
       </div>

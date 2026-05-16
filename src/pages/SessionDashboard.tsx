@@ -1,15 +1,7 @@
 /**
  * @file SessionDashboard.tsx - 술자리 메인 화면
- *
- * 술자리가 진행되는 동안 계속 보이는 메인 대시보드 화면이다.
- * 상단에는 다음 핑이타임까지 남은 시간이 카운트다운 타이머로 표시되고,
- * 사용자는 "내 잔수" 섹션에서 술 종류별(소주, 맥주, 소맥, 와인, 양주) 버튼을 눌러 음주량을 기록한다.
- * 중간 섹션에는 모든 멤버의 캐릭터와 현재 취도 레벨(LV0~5)이 그리드로 표시되며,
- * 레벨이 높을수록 캐릭터가 취한 모습으로 변화한다.
- * "지금 바로 핑이타임!" 버튼으로 즉시 발음 측정을 시작할 수 있고,
- * 방장에게는 "술자리 종료" 버튼이 추가로 표시된다.
  */
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useRoom } from '@/contexts/RoomContext'
 import { useTimer } from '@/hooks/useTimer'
@@ -20,6 +12,8 @@ import Character from '@/components/common/Character'
 import { sojuMultiplier } from '@/components/common/DrinkChip'
 import PageTransition from '@/components/layout/PageTransition'
 import type { DrinkType, CharacterBreed } from '@/types/room'
+import { getRoom, addDrink, getCurrentMemberId, triggerPingiTime } from '@/services/api'
+import { useWebSocket } from '@/hooks/useWebSocket'
 
 const DRINK_BUTTONS: { type: DrinkType; emoji: string; label: string }[] = [
   { type: 'soju', emoji: '🍶', label: '소주 1잔' },
@@ -34,32 +28,86 @@ interface MemberStatus {
   nickname: string
   breed: CharacterBreed
   level: number
+  isHost: boolean
 }
 
 export default function SessionDashboard() {
   const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
-  const { currentMember } = useRoom()
+  const { currentMember, setRoom } = useRoom()
 
   const [drinkCounts, setDrinkCounts] = useState<Record<DrinkType, number>>({
     soju: 0, beer: 0, somaek: 0, wine: 0, liquor: 0,
+  })
+  const [members, setMembers] = useState<MemberStatus[]>([])
+  const [isHost, setIsHost] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [triggering, setTriggering] = useState(false)
+
+  // WebSocket 연결 - pingi_time_started 시 자동으로 녹음 화면으로 이동
+  useWebSocket({
+    roomCode: code || '',
+    onMemberUpdated: () => fetchRoom(),
   })
 
   const { remaining } = useTimer({
     durationMs: TEST_INTERVAL_MS,
     autoStart: true,
-    onComplete: () => navigate(`/r/${code}/record`),
+    onComplete: async () => {
+      // 타이머 종료 시 방장만 핑이타임 트리거
+      if (isHost && code) {
+        try {
+          await triggerPingiTime(code)
+        } catch (error) {
+          console.error('Failed to trigger pingi time:', error)
+        }
+      }
+    },
   })
 
-  // TODO: API/WebSocket에서 실시간 멤버 상태 받기
-  const members: MemberStatus[] = [
-    { memberId: '1', nickname: '민준', breed: 'retriever', level: 0 },
-    { memberId: '2', nickname: '수진', breed: 'pomeranian', level: 0 },
-    { memberId: '3', nickname: '지훈', breed: 'shiba', level: 2 },
-    { memberId: '4', nickname: currentMember?.nickname ?? '나', breed: 'poodle', level: 0 },
-  ]
+  const fetchRoom = useCallback(async () => {
+    if (!code) return
+    try {
+      const room = await getRoom(code)
+      setRoom(room)
+      
+      const currentId = getCurrentMemberId()
+      
+      setMembers(room.members.map(m => ({
+        memberId: m.id,
+        nickname: m.nickname,
+        breed: (m.breed || 'retriever') as CharacterBreed,
+        level: m.level ?? 0,
+        isHost: m.isHost,
+      })))
+      
+      const me = room.members.find(m => m.id === currentId)
+      if (me) {
+        setIsHost(me.isHost)
+        if (me.drinks) {
+          setDrinkCounts({
+            soju: me.drinks.soju ?? 0,
+            beer: me.drinks.beer ?? 0,
+            somaek: me.drinks.somaek ?? 0,
+            wine: me.drinks.wine ?? 0,
+            liquor: me.drinks.liquor ?? 0,
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch room:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [code, setRoom])
 
-  const isHost = currentMember?.isHost ?? true
+  useEffect(() => {
+    fetchRoom()
+    
+    // 10초마다 방 정보 새로고침
+    const interval = setInterval(fetchRoom, 10000)
+    return () => clearInterval(interval)
+  }, [fetchRoom])
 
   const totalDrinks = Object.values(drinkCounts).reduce((sum, count) => sum + count, 0)
   const totalSoju = DRINK_BUTTONS.reduce(
@@ -74,12 +122,36 @@ export default function SessionDashboard() {
     return `${String(minutes).padStart(2, '0')} : ${String(seconds).padStart(2, '0')}`
   }
 
-  const handleAddDrink = (type: DrinkType) => {
+  const handleAddDrink = async (type: DrinkType) => {
+    const memberId = getCurrentMemberId()
+    if (!memberId) return
+    
+    // 먼저 UI 업데이트
     setDrinkCounts((prev) => ({
       ...prev,
       [type]: prev[type] + 1,
     }))
-    // TODO: API로 음주 로그 저장
+    
+    try {
+      await addDrink(memberId, type, 1)
+    } catch (error) {
+      console.error('Failed to add drink:', error)
+      // 실패하면 롤백
+      setDrinkCounts((prev) => ({
+        ...prev,
+        [type]: prev[type] - 1,
+      }))
+    }
+  }
+
+  if (loading) {
+    return (
+      <PageTransition>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-brown-500">로딩 중...</p>
+        </div>
+      </PageTransition>
+    )
   }
 
   return (
@@ -132,22 +204,43 @@ export default function SessionDashboard() {
 
         <div>
           <p className="text-sm font-bold text-brown-900 mb-3">현재 멤버 상태</p>
-          <div className="grid grid-cols-4 gap-2">
-            {members.map((m) => (
-              <div key={m.memberId} className="text-center">
-                <Character breed={m.breed} level={m.level} size="sm" />
-                <p className="font-display text-xs mt-1 text-brown-900">{m.nickname}</p>
-              </div>
-            ))}
-          </div>
+          {members.length === 0 ? (
+            <p className="text-center text-brown-500 py-4">멤버가 없어요</p>
+          ) : (
+            <div className={`grid gap-2 ${members.length <= 4 ? 'grid-cols-' + Math.min(members.length, 4) : 'grid-cols-4'}`}>
+              {members.map((m) => (
+                <div key={m.memberId} className="text-center">
+                  <Character breed={m.breed} level={m.level} size="sm" />
+                  <p className="font-display text-xs mt-1 text-brown-900">
+                    {m.nickname}
+                    {m.isHost && ' 👑'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mt-auto pt-6 flex flex-col gap-3">
           <Button
             variant="primary"
-            onClick={() => navigate(`/r/${code}/record`)}
+            disabled={triggering}
+            onClick={async () => {
+              if (!code) return
+              setTriggering(true)
+              try {
+                await triggerPingiTime(code)
+                // WebSocket이 pingi_time_started를 수신하면 모두 녹음 화면으로 이동
+                // 트리거한 사람은 바로 이동
+                navigate(`/r/${code}/record`)
+              } catch (error) {
+                console.error('Failed to trigger pingi time:', error)
+              } finally {
+                setTriggering(false)
+              }
+            }}
           >
-            🌀 지금 바로 핑이타임!
+            {triggering ? '시작 중...' : '🌀 지금 바로 핑이타임!'}
           </Button>
 
           {isHost && (

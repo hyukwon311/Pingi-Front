@@ -2,12 +2,8 @@
  * @file InstagramCard.tsx - 인스타 공유 카드 페이지
  *
  * 술자리 결과를 이미지로 만들어 SNS에 공유할 수 있는 카드 생성 화면이다.
- * 상단 토글로 스토리(9:16) 또는 피드(1:1) 비율을 선택할 수 있으며,
- * 카드에는 술자리 날짜, 장소, 참여 멤버의 캐릭터와 최종 레벨이 표시된다.
- * html2canvas 라이브러리를 사용하여 카드를 PNG 이미지로 다운로드하며,
- * 다운로드한 이미지를 인스타그램 스토리나 피드에 바로 업로드할 수 있다.
  */
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import html2canvas from 'html2canvas'
 import Button from '@/components/common/Button'
@@ -16,6 +12,7 @@ import LevelBadge from '@/components/common/LevelBadge'
 import Character from '@/components/common/Character'
 import PageTransition from '@/components/layout/PageTransition'
 import type { CharacterBreed } from '@/types/room'
+import { getRoom, getFinalReport } from '@/services/api'
 
 type CardRatio = 'story' | 'feed'
 
@@ -31,20 +28,46 @@ export default function InstagramCard() {
   const cardRef = useRef<HTMLDivElement>(null)
   const [ratio, setRatio] = useState<CardRatio>('story')
   const [isDownloading, setIsDownloading] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [sessionInfo, setSessionInfo] = useState({ date: '', place: '', winner: '' })
+  const [members, setMembers] = useState<MemberResult[]>([])
 
-  // TODO: API에서 결과 데이터 받기
-  const sessionInfo = {
-    date: '2026.05.16',
-    place: '강남',
-    winner: '민준',
-  }
+  useEffect(() => {
+    async function fetchData() {
+      if (!code) return
+      try {
+        const [room, report] = await Promise.all([
+          getRoom(code),
+          getFinalReport(code).catch(() => null),
+        ])
 
-  const members: MemberResult[] = [
-    { nickname: '민준', level: 5, breed: 'retriever' },
-    { nickname: '수진', level: 4, breed: 'pomeranian' },
-    { nickname: '지훈', level: 3, breed: 'shiba' },
-    { nickname: '수아', level: 1, breed: 'poodle' },
-  ]
+        // 날짜 포맷
+        const date = new Date(room.scheduledAt)
+        const dateStr = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`
+
+        // 멤버 레벨 정렬 (높은 순)
+        const sortedMembers = [...room.members].sort((a, b) => b.level - a.level)
+        const winner = sortedMembers[0]?.nickname || ''
+
+        setSessionInfo({
+          date: dateStr,
+          place: room.location,
+          winner,
+        })
+
+        setMembers(room.members.map(m => ({
+          nickname: m.nickname,
+          level: m.level,
+          breed: (m.breed || 'retriever') as CharacterBreed,
+        })))
+      } catch (error) {
+        console.error('Failed to fetch data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [code])
 
   const handleDownload = async () => {
     if (!cardRef.current || isDownloading) return
@@ -67,6 +90,16 @@ export default function InstagramCard() {
     } finally {
       setIsDownloading(false)
     }
+  }
+
+  if (loading) {
+    return (
+      <PageTransition>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-brown-500">로딩 중...</p>
+        </div>
+      </PageTransition>
+    )
   }
 
   return (

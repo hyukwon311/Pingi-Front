@@ -12,6 +12,25 @@
  */
 import { useState, useRef, useCallback } from 'react'
 
+function pickMediaRecorder(stream: MediaStream): MediaRecorder {
+  const types = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+  ]
+  for (const t of types) {
+    try {
+      if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) {
+        return new MediaRecorder(stream, { mimeType: t })
+      }
+    } catch {
+      /* try next */
+    }
+  }
+  return new MediaRecorder(stream)
+}
+
 interface UseVoiceRecorderReturn {
   isRecording: boolean                  // 현재 녹음 중 여부
   audioBlob: Blob | null                // 녹음 완료된 오디오 Blob
@@ -30,7 +49,7 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
   const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      const mediaRecorder = pickMediaRecorder(stream)
       mediaRecorderRef.current = mediaRecorder
       chunksRef.current = []
 
@@ -38,7 +57,8 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
         if (e.data.size > 0) chunksRef.current.push(e.data)
       }
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        const mime = mediaRecorder.mimeType || 'audio/webm'
+        const blob = new Blob(chunksRef.current, { type: mime })
         setAudioBlob(blob)
         stream.getTracks().forEach((t) => t.stop())
       }

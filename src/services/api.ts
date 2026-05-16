@@ -2,14 +2,9 @@
  * @file api.ts - API 서비스 레이어
  *
  * 백엔드 REST API와 통신하기 위한 서비스 함수들을 제공한다.
- * 현재는 더미 데이터를 반환하는 Mock API로 구현되어 있으며,
- * 백엔드 개발 완료 후 실제 fetch 호출로 교체할 예정이다.
- * 방 생성/조회, 멤버 참가, 음성 업로드, 발음 분석 등 핑이 앱의 모든 API 요청을 담당하며,
- * 각 API 함수는 TypeScript 타입으로 요청/응답 형식이 명확하게 정의되어 있다.
- * 환경 변수(VITE_API_URL)로 API 엔드포인트를 설정할 수 있다.
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://api.pingi.app/v1';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/v1';
 
 // ─────────────────────────────────────────────────────────────
 //   타입 정의
@@ -21,6 +16,7 @@ export interface Room {
   location: string;
   scheduledAt: string;
   status: 'waiting' | 'live' | 'ended';
+  shareUrl?: string;
   members: Member[];
 }
 
@@ -102,6 +98,7 @@ export interface FinalReport {
 // ─────────────────────────────────────────────────────────────
 
 let authToken: string | null = null;
+let currentMemberId: string | null = null;
 
 export function setAuthToken(token: string | null) {
   authToken = token;
@@ -119,6 +116,22 @@ export function getAuthToken(): string | null {
   return authToken;
 }
 
+export function setCurrentMemberId(id: string | null) {
+  currentMemberId = id;
+  if (id) {
+    localStorage.setItem('pingi_member_id', id);
+  } else {
+    localStorage.removeItem('pingi_member_id');
+  }
+}
+
+export function getCurrentMemberId(): string | null {
+  if (!currentMemberId) {
+    currentMemberId = localStorage.getItem('pingi_member_id');
+  }
+  return currentMemberId;
+}
+
 // ─────────────────────────────────────────────────────────────
 //   HTTP 헬퍼
 // ─────────────────────────────────────────────────────────────
@@ -129,7 +142,7 @@ async function request<T>(
 ): Promise<T> {
   const token = getAuthToken();
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    ...(!(options.body instanceof FormData) && { 'Content-Type': 'application/json' }),
     ...(token && { Authorization: `Bearer ${token}` }),
     ...options.headers,
   };
@@ -153,76 +166,56 @@ async function request<T>(
 
 /** POST /rooms - 방 생성 */
 export async function createRoom(data: CreateRoomRequest): Promise<CreateRoomResponse> {
-  // TODO: 실제 API 호출로 교체
-  // return request('/rooms', { method: 'POST', body: JSON.stringify(data) });
-
-  // 더미 응답
-  const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-  return {
-    room: {
-      id: `r_${Date.now()}`,
-      code,
-      location: data.location,
-      scheduledAt: data.scheduledAt,
-      status: 'waiting',
-      members: [],
-    },
-    host: {
-      id: `m_${Date.now()}`,
-      nickname: data.hostNickname,
-      token: 'dummy_token',
-    },
-  };
+  const response = await request<CreateRoomResponse>('/rooms', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  
+  // 토큰과 멤버ID 저장
+  setAuthToken(response.host.token);
+  setCurrentMemberId(response.host.id);
+  
+  return response;
 }
 
 /** GET /rooms/{code} - 방 정보 조회 */
 export async function getRoom(code: string): Promise<Room> {
-  // TODO: 실제 API 호출로 교체
-  // return request(`/rooms/${code}`);
-
-  // 더미 응답
-  return {
-    id: `r_${code}`,
-    code,
-    location: '강남역 4번출구',
-    scheduledAt: new Date().toISOString(),
-    status: 'waiting',
-    members: [
-      { id: 'm_1', nickname: '민준', breed: 'retriever', isHost: true, arrived: true },
-      { id: 'm_2', nickname: '수진', breed: 'pomeranian', isHost: false, arrived: true },
-      { id: 'm_3', nickname: '지훈', breed: 'shiba', isHost: false, arrived: false, etaPreset: 'late10' },
-    ],
-  };
+  return request<Room>(`/rooms/${code}`);
 }
 
 /** POST /rooms/{code}/members - 방 입장 */
 export async function joinRoom(code: string, data: JoinRoomRequest): Promise<JoinRoomResponse> {
-  // TODO: 실제 API 호출로 교체
-  // return request(`/rooms/${code}/members`, { method: 'POST', body: JSON.stringify(data) });
-
-  const room = await getRoom(code);
-  const member = {
-    id: `m_${Date.now()}`,
-    nickname: data.nickname,
-    token: 'dummy_token',
-  };
-  return { member, room };
+  const response = await request<JoinRoomResponse>(`/rooms/${code}/members`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  
+  // 토큰과 멤버ID 저장
+  setAuthToken(response.member.token);
+  setCurrentMemberId(response.member.id);
+  
+  return response;
 }
 
 /** POST /rooms/{code}/start - 술자리 시작 (방장만) */
 export async function startRoom(code: string): Promise<{ status: string; startedAt: string }> {
-  // TODO: 실제 API 호출로 교체
-  // return request(`/rooms/${code}/start`, { method: 'POST' });
-
-  return { status: 'live', startedAt: new Date().toISOString() };
+  return request(`/rooms/${code}/start`, { method: 'POST' });
 }
 
 /** POST /rooms/{code}/end - 술자리 종료 (방장만) */
 export async function endRoom(code: string): Promise<{ status: string; reportId: string }> {
-  // TODO: 실제 API 호출로 교체
-  // return request(`/rooms/${code}/end`, { method: 'POST' });
+  return request(`/rooms/${code}/end`, { method: 'POST' });
+}
 
-  return { status: 'ended', reportId: `rpt_${Date.now()}` };
+/** POST /rooms/{code}/pingi - 핑이타임 트리거 (방장만) */
+export async function triggerPingiTime(code: string): Promise<{
+  id: string;
+  roomId: string;
+  index: number;
+  sentence: string;
+  startedAt: string;
+}> {
+  return request(`/rooms/${code}/pingi`, { method: 'POST' });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -232,18 +225,12 @@ export async function endRoom(code: string): Promise<{ status: string; reportId:
 /** PATCH /members/{id} - 멤버 정보 업데이트 */
 export async function updateMember(
   memberId: string,
-  data: Partial<{ breed: string; arrivalEta: string; hungerLevel: number; arrived: boolean }>
+  data: Partial<{ breed: string; arrivalEta: string; hungerLevel: number; arrived: boolean; etaPreset: string }>
 ): Promise<Member> {
-  // TODO: 실제 API 호출로 교체
-  // return request(`/members/${memberId}`, { method: 'PATCH', body: JSON.stringify(data) });
-
-  return {
-    id: memberId,
-    nickname: '나',
-    breed: data.breed || null,
-    isHost: false,
-    arrived: data.arrived ?? false,
-  };
+  return request<Member>(`/members/${memberId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
 }
 
 /** POST /members/{id}/drinks - 잔수 추가 */
@@ -252,13 +239,10 @@ export async function addDrink(
   type: string,
   delta: number
 ): Promise<{ drinks: Record<string, number>; sojuEquivalent: number }> {
-  // TODO: 실제 API 호출로 교체
-  // return request(`/members/${memberId}/drinks`, { method: 'POST', body: JSON.stringify({ type, delta }) });
-
-  return {
-    drinks: { [type]: delta > 0 ? delta : 0 },
-    sojuEquivalent: delta,
-  };
+  return request(`/members/${memberId}/drinks`, {
+    method: 'POST',
+    body: JSON.stringify({ type, delta }),
+  });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -270,86 +254,62 @@ export async function uploadBaseline(
   memberId: string,
   audioBlobs: Blob[],
   sentences: string[]
-): Promise<{ baselineId: string }> {
-  // TODO: 실제 API 호출로 교체 (multipart/form-data)
-  // const formData = new FormData();
-  // audioBlobs.forEach((blob, i) => formData.append(`audio_${i + 1}`, blob));
-  // sentences.forEach((s, i) => formData.append(`sentence_${i + 1}`, s));
-  // return request(`/members/${memberId}/baseline`, { method: 'POST', body: formData });
+): Promise<{ baselineId: string; featureVector: Record<string, number> }> {
+  const formData = new FormData();
+  audioBlobs.forEach((blob, i) => formData.append(`audio_${i + 1}`, blob, `audio_${i + 1}.wav`));
+  sentences.forEach((s, i) => formData.append(`sentence_${i + 1}`, s));
+  
+  return request(`/members/${memberId}/baseline`, {
+    method: 'POST',
+    body: formData,
+  });
+}
 
-  return { baselineId: `bl_${Date.now()}` };
+/** POST /members/{id}/baseline/complete - 베이스라인 완료 표시 (간단 버전) */
+export async function completeBaseline(
+  memberId: string
+): Promise<{ message: string; allCompleted: boolean }> {
+  return request(`/members/${memberId}/baseline/complete`, {
+    method: 'POST',
+  });
 }
 
 /** POST /checkpoints/{id}/recordings - 핑이타임 녹음 업로드 */
 export async function uploadRecording(
   checkpointId: string,
   audioBlob: Blob
-): Promise<{ recording: { id: string; score: number; level: number; delta: number } }> {
-  // TODO: 실제 API 호출로 교체 (multipart/form-data)
-
-  return {
-    recording: {
-      id: `rec_${Date.now()}`,
-      score: Math.random(),
-      level: Math.floor(Math.random() * 5) + 1,
-      delta: Math.floor(Math.random() * 3),
-    },
-  };
+): Promise<{ recording: { id: string; score: number; level: number; previousLevel: number; delta: number } }> {
+  const formData = new FormData();
+  formData.append('audio', audioBlob, 'recording.wav');
+  
+  return request(`/checkpoints/${checkpointId}/recordings`, {
+    method: 'POST',
+    body: formData,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────
 //   결과 / 리포트 API
 // ─────────────────────────────────────────────────────────────
 
-/** GET /checkpoints/{id}/result - 핑이타임 결과 */
+/** GET /checkpoints/{id}/results - 핑이타임 결과 */
 export async function getCheckpointResult(checkpointId: string): Promise<CheckpointResult> {
-  // TODO: 실제 API 호출로 교체
-  // return request(`/checkpoints/${checkpointId}/result`);
-
-  return {
-    checkpointId,
-    index: 3,
-    rankings: [
-      { memberId: 'm_1', nickname: '민준', breed: 'retriever', level: 4, previousLevel: 2, delta: 2 },
-      { memberId: 'm_2', nickname: '수진', breed: 'pomeranian', level: 3, previousLevel: 2, delta: 1, isHungry: true },
-      { memberId: 'm_3', nickname: '지훈', breed: 'shiba', level: 2, previousLevel: 2, delta: 0 },
-      { memberId: 'm_4', nickname: '수아', breed: 'poodle', level: 0, previousLevel: 0, delta: 0, isNotDrinking: true },
-    ],
-    topDrunk: 'm_1',
-    warnings: [
-      { type: 'hunger', memberId: 'm_2', message: '공복으로 시작한 수진, 밥 좀 든든하게 먹어요 🍚' },
-    ],
-  };
+  return request(`/checkpoints/${checkpointId}/results`);
 }
 
 /** GET /rooms/{code}/report - 최종 리포트 */
 export async function getFinalReport(code: string): Promise<FinalReport> {
-  // TODO: 실제 API 호출로 교체
-  // return request(`/rooms/${code}/report`);
+  return request(`/rooms/${code}/report`);
+}
 
-  return {
-    awards: [
-      { type: 'top_drunk', memberId: 'm_1', nickname: '민준', breed: 'retriever', description: 'Level 5 달성' },
-      { type: 'liver_guardian', memberId: 'm_4', nickname: '수아', breed: 'poodle', description: '끝까지 Level 1 사수' },
-      { type: 'pacemaker', memberId: 'm_3', nickname: '지훈', breed: 'shiba', description: 'Level 3에서 멈춤' },
-      { type: 'accelerator', memberId: 'm_2', nickname: '수진', breed: 'pomeranian', description: '레벨 상승 속도 1위' },
-    ],
-    badges: [
-      { emoji: '🫠', name: '알쓰', winner: '민준', reason: '첫 핑이타임 L2' },
-      { emoji: '🚂', name: '폭주기관차', winner: '민준', reason: '3회차 +2' },
-    ],
-    timeline: [
-      { time: '19:30', levels: [0, 0, 0, 0] },
-      { time: '20:00', levels: [1, 1, 0, 0] },
-      { time: '20:30', levels: [2, 2, 1, 0] },
-      { time: '21:00', levels: [4, 3, 2, 1] },
-      { time: '21:30', levels: [5, 4, 3, 1] },
-    ],
-    stats: {
-      pingiTimeCount: 6,
-      maxLevelMember: { nickname: '민준', level: 5 },
-    },
-  };
+/** GET /rooms/{code}/share-card - 공유 카드 데이터 */
+export async function getShareCard(code: string, aspect: '9:16' | '1:1' = '9:16'): Promise<{
+  date: string;
+  location: string;
+  winner: string;
+  members: { nickname: string; breed: string | null; level: number }[];
+}> {
+  return request(`/rooms/${code}/share-card?aspect=${aspect}`);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -359,42 +319,51 @@ export async function getFinalReport(code: string): Promise<FinalReport> {
 /** POST /members/{id}/home - 귀가 체크인 */
 export async function checkInHome(
   memberId: string,
-  audioBlob?: Blob
-): Promise<{ arrivedAt: string; transcript?: string }> {
-  // TODO: 실제 API 호출로 교체
-
-  return {
-    arrivedAt: new Date().toISOString(),
-    transcript: '오늘 진짜 재밌었다~ 다음에 또 하자!',
-  };
+  audioBlob?: Blob,
+  transcript?: string
+): Promise<{ arrivedAt: string; transcript?: string | null }> {
+  const formData = new FormData();
+  if (audioBlob) {
+    const ext = audioBlob.type.includes('webm')
+      ? 'webm'
+      : audioBlob.type.includes('mp4')
+        ? 'mp4'
+        : audioBlob.type.includes('ogg')
+          ? 'ogg'
+          : audioBlob.type.includes('mpeg')
+            ? 'mp3'
+            : 'wav';
+    formData.append('audio', audioBlob, `review.${ext}`);
+  }
+  if (transcript) {
+    formData.append('transcript', transcript);
+  }
+  
+  return request(`/members/${memberId}/home`, {
+    method: 'POST',
+    body: (audioBlob || transcript) ? formData : undefined,
+  });
 }
 
-/** GET /rooms/{code}/home-status - 귀가 상태 조회 */
+/** GET /rooms/{code}/home-status - 귀가 상태 조회 (임시 - 백엔드 미구현) */
 export async function getHomeStatus(code: string): Promise<{
   members: { nickname: string; breed: string; state: 'home' | 'moving' | 'pending'; arrivedAt?: string }[];
 }> {
-  // TODO: 실제 API 호출로 교체
-
+  // 현재 백엔드에 해당 API가 없으므로 room 데이터에서 추론
+  const room = await getRoom(code);
   return {
-    members: [
-      { nickname: '민준', breed: 'retriever', state: 'home', arrivedAt: '23:12' },
-      { nickname: '수진', breed: 'pomeranian', state: 'moving' },
-      { nickname: '지훈', breed: 'shiba', state: 'home', arrivedAt: '23:08' },
-      { nickname: '수아', breed: 'poodle', state: 'pending' },
-    ],
+    members: room.members.map(m => ({
+      nickname: m.nickname,
+      breed: m.breed || 'retriever',
+      state: 'pending' as const,
+    })),
   };
 }
 
-/** GET /rooms/{code}/reviews - 귀가 후기 조회 */
-export async function getReviews(code: string): Promise<{
+/** GET /rooms/{code}/reviews - 귀가 후기 조회 (임시 - 백엔드 미구현) */
+export async function getReviews(_code: string): Promise<{
   reviews: { nickname: string; breed: string; text: string; audioUrl: string }[];
 }> {
-  // TODO: 실제 API 호출로 교체
-
-  return {
-    reviews: [
-      { nickname: '민준', breed: 'retriever', text: '오늘 진짜 재밌었다~ 다음에 또 하자!', audioUrl: '' },
-      { nickname: '지훈', breed: 'shiba', text: '막차 겨우 탔어 ㅋㅋㅋ 다들 잘 들어가~', audioUrl: '' },
-    ],
-  };
+  // 현재 백엔드에 해당 API가 없으므로 빈 배열 반환
+  return { reviews: [] };
 }

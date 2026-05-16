@@ -2,35 +2,58 @@
  * @file CharacterConfirm.tsx - 캐릭터 확인 페이지
  *
  * 술자리 시작 전, 모든 참여 멤버의 캐릭터와 닉네임을 한눈에 확인하는 화면이다.
- * 각 멤버의 선택한 캐릭터(견종)가 LV0 상태로 표시되며,
- * 이를 통해 술자리 동안 함께할 친구들을 파악할 수 있다.
- * "베이스라인 측정하러 가기" 버튼을 누르면 발음 테스트 화면으로 이동하여
- * 술 마시기 전 기준 음성을 녹음하게 된다.
  */
+import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import Button from '@/components/common/Button'
 import Card from '@/components/common/Card'
 import Character, { breedNames } from '@/components/common/Character'
 import PageTransition from '@/components/layout/PageTransition'
 import type { CharacterBreed } from '@/types/room'
+import { getRoom } from '@/services/api'
 
 interface MemberInfo {
   memberId: string
   nickname: string
   breed: CharacterBreed
+  isHost: boolean
 }
 
 export default function CharacterConfirm() {
   const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
+  const [members, setMembers] = useState<MemberInfo[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // TODO: API에서 멤버 목록 받기
-  const members: MemberInfo[] = [
-    { memberId: '1', nickname: '민준', breed: 'retriever' },
-    { memberId: '2', nickname: '수진', breed: 'pomeranian' },
-    { memberId: '3', nickname: '지훈', breed: 'shiba' },
-    { memberId: '4', nickname: '수아', breed: 'poodle' },
-  ]
+  useEffect(() => {
+    async function fetchMembers() {
+      if (!code) return
+      try {
+        const room = await getRoom(code)
+        setMembers(room.members.map(m => ({
+          memberId: m.id,
+          nickname: m.nickname,
+          breed: (m.breed || 'retriever') as CharacterBreed,
+          isHost: m.isHost,
+        })))
+      } catch (error) {
+        console.error('Failed to fetch members:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchMembers()
+  }, [code])
+
+  if (loading) {
+    return (
+      <PageTransition>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-brown-500">로딩 중...</p>
+        </div>
+      </PageTransition>
+    )
+  }
 
   return (
     <PageTransition>
@@ -42,21 +65,26 @@ export default function CharacterConfirm() {
         </div>
 
         <Card className="mt-6">
-          <div className="flex flex-col gap-3">
-            {members.map((m) => (
-              <div key={m.memberId} className="flex items-center gap-3">
-                <Character breed={m.breed} level={0} size="xs" showBadge={false} showEffects={false} />
-                <div>
-                  <p className="font-display text-sm text-brown-900">
-                    {m.nickname}
-                  </p>
-                  <p className="text-[10px] text-brown-400">
-                    ({breedNames[m.breed]})
-                  </p>
+          {members.length === 0 ? (
+            <p className="text-center text-brown-500 py-4">멤버가 없어요</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {members.map((m) => (
+                <div key={m.memberId} className="flex items-center gap-3">
+                  <Character breed={m.breed} level={0} size="xs" showBadge={false} showEffects={false} />
+                  <div>
+                    <p className="font-display text-sm text-brown-900">
+                      {m.nickname}
+                      {m.isHost && ' 👑'}
+                    </p>
+                    <p className="text-[10px] text-brown-400">
+                      ({breedNames[m.breed]})
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         <Card className="mt-4 text-center">
