@@ -25,6 +25,13 @@ export function useSession() {
     [dispatch],
   )
 
+  /** baseline 측정 완료 처리 (해당 참가자를 준비 완료 상태로 전환) */
+  const completeBaseline = useCallback(
+    (userId: string) =>
+      dispatch({ type: 'COMPLETE_BASELINE', payload: { userId } }),
+    [dispatch],
+  )
+
   /** 세션 상태를 초기화 (세션 퇴장 또는 종료 시 호출) */
   const clearSession = useCallback(() => dispatch({ type: 'CLEAR' }), [dispatch])
 
@@ -32,6 +39,7 @@ export function useSession() {
     session: state.session,
     setSession,
     updateDrinkCount,
+    completeBaseline,
     clearSession,
   }
 }

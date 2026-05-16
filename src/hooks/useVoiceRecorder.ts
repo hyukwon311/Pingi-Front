@@ -1,9 +1,12 @@
 /**
  * @file useVoiceRecorder.ts - 음성 녹음 훅
  *
- * 브라우저의 MediaRecorder API를 사용하여 마이크 녹음을 제어한다.
- * 녹음 시작/정지/리셋 기능을 제공하며, 녹음된 오디오를 Blob으로 반환한다.
- * BaselineTest, VoiceRecording 페이지에서 사용된다.
+ * 브라우저의 MediaRecorder API를 사용하여 마이크로 음성을 녹음하는 커스텀 훅이다.
+ * startRecording()으로 녹음을 시작하고, stopRecording()으로 종료하며,
+ * 녹음된 오디오는 Blob 형태로 audioBlob 상태에 저장된다.
+ * 마이크 권한이 거부되면 사용자에게 알림을 표시하며,
+ * BaselineTest(베이스라인 측정)와 VoiceRecording(핑이타임) 페이지에서 발음 녹음에 사용된다.
+ * resetRecording()으로 녹음 데이터를 초기화할 수 있다.
  *
  * @returns { isRecording, audioBlob, startRecording, stopRecording, resetRecording }
  */
@@ -25,22 +28,27 @@ export function useVoiceRecorder(): UseVoiceRecorderReturn {
 
   /** 마이크 접근 권한을 요청하고 녹음을 시작한다 */
   const startRecording = useCallback(async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
-    mediaRecorderRef.current = mediaRecorder
-    chunksRef.current = []
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      mediaRecorderRef.current = mediaRecorder
+      chunksRef.current = []
 
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data)
-    }
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-      setAudioBlob(blob)
-      stream.getTracks().forEach((t) => t.stop())
-    }
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data)
+      }
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+        setAudioBlob(blob)
+        stream.getTracks().forEach((t) => t.stop())
+      }
 
-    mediaRecorder.start()
-    setIsRecording(true)
+      mediaRecorder.start()
+      setIsRecording(true)
+    } catch (error) {
+      console.error('마이크 접근 실패:', error)
+      alert('마이크 권한을 허용해주세요. 브라우저 설정에서 마이크 접근을 확인하세요.')
+    }
   }, [])
 
   /** 녹음을 정지하고 오디오 Blob을 생성한다 */

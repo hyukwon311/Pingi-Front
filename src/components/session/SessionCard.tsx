@@ -19,7 +19,6 @@ interface SessionCardProps {
 /** 세션 상태별 배지 라벨 및 색상 variant 매핑 */
 const statusMap: Record<Session['status'], { label: string; variant: 'info' | 'success' | 'warning' | 'default' }> = {
   waiting: { label: '대기 중', variant: 'default' },
-  baseline: { label: '측정 중', variant: 'info' },
   active: { label: '진행 중', variant: 'success' },
   finished: { label: '종료', variant: 'warning' },
 }

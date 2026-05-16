@@ -1,0 +1,116 @@
+/* ──────────────────────────────────────────────────────
+   핑이 캐릭터 스타일 + 애니메이션
+   ────────────────────────────────────────────────────── */
+
+.cell {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 16px 8px 12px;
+  background: #fff;
+  border-radius: 16px;
+  text-align: center;
+}
+
+.cell.warn {
+  background: #fff0d8;
+  border: 2px solid #ffb84d;
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.nickname {
+  margin-top: 8px;
+  font-family: 'Jua', 'Inter', system-ui, sans-serif;
+  font-size: 14px;
+  color: #2a1a0a;
+}
+
+.levelTag {
+  margin-top: 6px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #b0a080;
+}
+
+.levelName {
+  margin-top: 2px;
+  font-family: 'Jua', 'Inter', system-ui, sans-serif;
+  font-size: 13px;
+  color: #2a1a0a;
+}
+
+/* ── 흔들림 애니메이션 (level 3, 4, 5) ── */
+
+@keyframes pingi-wobble-soft {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50%      { transform: rotate(1.5deg); }
+}
+
+@keyframes pingi-wobble-mid {
+  0%, 100% { transform: rotate(-3deg) translateY(0); }
+  33%      { transform: rotate(2deg) translateY(-1px); }
+  66%      { transform: rotate(-2deg) translateY(1px); }
+}
+
+@keyframes pingi-wobble-hard {
+  0%, 100% { transform: rotate(-5deg) translate(-1px, 0); }
+  25%      { transform: rotate(4deg) translate(2px, -2px); }
+  75%      { transform: rotate(5deg) translate(1px, -1px); }
+}
+
+.cell[data-level="3"] .svg {
+  animation: pingi-wobble-soft 2.2s ease-in-out infinite;
+  transform-origin: 50% 80%;
+}
+
+.cell[data-level="4"] .svg {
+  animation: pingi-wobble-mid 1.5s ease-in-out infinite;
+  transform-origin: 50% 80%;
+}
+
+.cell[data-level="5"] .svg {
+  animation: pingi-wobble-hard 1.2s ease-in-out infinite;
+  transform-origin: 50% 80%;
+}
+
+/* ── 떠다니는 이펙트 ── */
+
+@keyframes pingi-float {
+  0%, 100% { transform: translateY(0); opacity: 0.6; }
+  50%      { transform: translateY(-3px); opacity: 1; }
+}
+
+.fx {
+  position: absolute;
+  z-index: 2;
+  font-size: 18px;
+  pointer-events: none;
+  animation: pingi-float 2s ease-in-out infinite;
+}
+
+.fxTopRight  { top: 6px;  right: 10px; }
+.fxTopLeft   { top: 12px; left: 10px;  animation-delay: 0.4s; }
+.fxTopCenter { top: 2px;  left: 50%;   transform: translateX(-50%); animation-delay: 0.8s; }
+
+/* ── 부드러운 레벨 전환 (선택) ── */
+
+.cell .svg {
+  transition: filter 0.3s ease;
+}
+
+/* 접근성: 애니메이션 줄이기 환경설정 존중 */
+@media (prefers-reduced-motion: reduce) {
+  .cell .svg,
+  .fx {
+    animation: none !important;
+  }
+}
