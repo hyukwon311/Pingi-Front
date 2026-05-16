@@ -1,44 +1,42 @@
 /**
  * @file Button.tsx - 범용 버튼 컴포넌트
  *
- * 앱 전체에서 사용되는 통일된 스타일의 버튼.
- * variant(색상 테마)와 size(크기)를 조합하여 다양한 용도로 사용한다.
+ * 핑이 디자인 시스템의 표준 버튼 컴포넌트로, 모든 CTA와 액션에 사용된다.
+ * 4가지 variant를 제공하며, 각각의 스타일은 다음과 같다:
+ * - primary: 빨간색(ink) 배경의 메인 CTA 버튼
+ * - secondary: 흰색 배경에 갈색 테두리의 보조 버튼
+ * - ghost: 투명 배경에 점선 테두리의 tertiary 버튼
+ * - success: 녹색 배경의 긍정적 액션 버튼 (도착 완료 등)
+ * fullWidth prop으로 버튼 너비를 제어할 수 있으며, 기본적으로 부모 너비를 가득 채운다.
+ * 모든 표준 HTML button 속성을 지원한다.
  *
- * @param variant - 'primary' (메인) | 'secondary' (보조) | 'ghost' (투명) | 'danger' (위험)
- * @param size - 'sm' | 'md' | 'lg'
- * @param fullWidth - true이면 부모 너비를 가득 채움
+ * @param variant - 버튼 스타일 종류
+ * @param fullWidth - true이면 부모 너비를 가득 채움 (기본: true)
  */
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 
-type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
-type ButtonSize = 'sm' | 'md' | 'lg'
+type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'success'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant
-  size?: ButtonSize
   fullWidth?: boolean
   children: ReactNode
 }
 
-/** variant별 색상 스타일 */
 const variantStyles: Record<ButtonVariant, string> = {
-  primary: 'bg-pingi-500 text-white active:bg-pingi-600',
-  secondary: 'bg-pingi-50 text-pingi-600 active:bg-pingi-100',
-  ghost: 'bg-transparent text-grey-600 active:bg-grey-100',
-  danger: 'bg-[#ffeeee] text-status-danger active:bg-[#fddede]',
-}
-
-/** size별 패딩·폰트·둥글기 스타일 */
-const sizeStyles: Record<ButtonSize, string> = {
-  sm: 'px-4 py-2 text-[13px] rounded-xl min-h-[36px]',
-  md: 'px-5 py-3 text-[15px] rounded-2xl min-h-[48px]',
-  lg: 'px-6 py-4 text-[16px] rounded-2xl min-h-[54px]',
+  primary:
+    'bg-ink text-white font-display text-base active:opacity-90',
+  secondary:
+    'bg-white text-brown-900 border-2 border-brown-300 font-display text-base active:bg-gray-50',
+  ghost:
+    'bg-transparent text-brown-500 border-[1.5px] border-dashed border-brown-300 font-display text-sm',
+  success:
+    'bg-success text-white font-display text-base active:opacity-90',
 }
 
 export default function Button({
   variant = 'primary',
-  size = 'md',
-  fullWidth = false,
+  fullWidth = true,
   className = '',
   children,
   disabled,
@@ -47,9 +45,8 @@ export default function Button({
   return (
     <button
       className={`
-        inline-flex items-center justify-center font-semibold transition-all duration-150
+        py-3.5 transition-all duration-150
         ${variantStyles[variant]}
-        ${sizeStyles[size]}
         ${fullWidth ? 'w-full' : ''}
         ${disabled ? 'opacity-30 pointer-events-none' : ''}
         ${className}
