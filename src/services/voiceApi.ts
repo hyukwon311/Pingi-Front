@@ -16,7 +16,7 @@ export const voiceApi = {
     const form = new FormData()
     form.append('audio', audioBlob, 'baseline.webm')
     return fetch(
-      `${import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api'}/sessions/${sessionId}/baseline`,
+      `${import.meta.env.VITE_API_URL ?? '/v1'}/sessions/${sessionId}/baseline`,
       { method: 'POST', body: form },
     )
   },
@@ -28,7 +28,7 @@ export const voiceApi = {
     const form = new FormData()
     form.append('audio', audioBlob, 'test.webm')
     return fetch(
-      `${import.meta.env.VITE_API_URL ?? 'http://localhost:8080/api'}/sessions/${sessionId}/test`,
+      `${import.meta.env.VITE_API_URL ?? '/v1'}/sessions/${sessionId}/test`,
       { method: 'POST', body: form },
     )
   },

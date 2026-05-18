@@ -5,8 +5,8 @@ services:
     build:
       context: .
       args:
-        VITE_API_URL: http://localhost:8100/v1
-        VITE_WS_URL: http://localhost:8100
+        VITE_API_URL: /v1
+        VITE_WS_URL: ""
     container_name: pingi-frontend
     ports:
       - "9603:80"

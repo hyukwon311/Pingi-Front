@@ -4,7 +4,7 @@
  * 백엔드 REST API와 통신하기 위한 서비스 함수들을 제공한다.
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/v1';
+const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000/v1';
 
 // ─────────────────────────────────────────────────────────────
 //   타입 정의
