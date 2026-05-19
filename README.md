@@ -26,8 +26,11 @@
 ### 🔄 실시간 동기화 (WebSocket)
 - **방장 시작 시**: 모든 멤버가 자동으로 캐릭터 확인 → 베이스라인 녹음 화면으로 이동
 - **베이스라인 완료 시**: 모든 멤버가 완료하면 자동으로 핑이 Live 화면으로 동시 이동
-- **핑이타임 트리거**: 한 명이 버튼 누르면 모두 녹음 화면으로 이동
-- **타이머 종료**: 20분마다 자동으로 모든 멤버에게 핑이타임 알림
+- **핑이타임 트리거**: 한 명이 버튼 누르면 모두 녹음 화면으로 동시 이동
+- **녹음 동기화**: 전원 제출 완료 시 함께 순위 결과 화면으로 이동
+- **결과 확인 동기화**: 전원 "확인" 완료 시 함께 대시보드로 복귀 (타이머 동기화)
+- **타이머 종료**: 15분마다 자동으로 모든 멤버에게 핑이타임 알림
+- **자동 녹음 종료**: 베이스라인·핑이타임 녹음 모두 8초 도달 시 자동 종료
 - **귀가 체크인**: 멤버가 귀가하면 실시간으로 다른 멤버에게 알림
 
 ### 🏆 결과 & 공유
@@ -60,7 +63,8 @@
 
 - Node.js 18 이상
 - npm 9 이상
-- **백엔드 서버** ([pingi-backend](../pingi-backend)) 실행 중
+- **백엔드 서버** ([pingi-backend](../pingi-backend)) 실행 중 (포트 8000)
+- **AI 서버** ([Pingi-AI](../Pingi-AI)) 실행 중 (포트 8001)
 
 ### 설치 및 실행
 
@@ -211,14 +215,22 @@ src/
    [WebSocket: all_baseline_complete → 모두 핑이 Live로 동시 이동]
         ↓
    술자리 메인 대시보드 (핑이 Live)
-        ↓ (20분마다 또는 수동)
+        ↓ (15분마다 또는 수동)
    [WebSocket: pingi_time_started → 모두 녹음 화면으로 이동]
         ↓
-     핑이타임 측정 → 결과 확인
+     핑이타임 녹음 (8초 자동 종료)
+        ↓
+     녹음 대기 (recording_progress: N/M명 완료)
+        ↓
+   [WebSocket: checkpoint_result → 모두 결과 화면으로 이동]
+        ↓
+     순위 확인 → "확인" 버튼 (result_ack_progress: N/M명 확인)
+        ↓
+   [WebSocket: pingi_live_resumed → 모두 대시보드 복귀 (타이머 동기화)]
 ```
 
 > **중요**: 모든 멤버가 각자 베이스라인 녹음을 완료해야 동시에 핑이 Live로 이동합니다.
-> 이를 통해 핑이타임 타이머가 모든 멤버에게 동기화됩니다.
+> 핑이타임 전 과정(녹음→결과→복귀)이 전원 동기화로 진행됩니다.
 
 ### 3️⃣ 종료 & 귀가
 
@@ -336,9 +348,14 @@ function WaitingRoom() {
 | `room_started` | 술자리 시작 | → `/r/:code/confirm` 이동 |
 | `all_baseline_complete` | 모든 멤버 베이스라인 완료 | → `/r/:code/live` 이동 |
 | `pingi_time_started` | 핑이타임 시작 | → `/r/:code/record` 이동 |
-| `checkpoint_result` | 핑이타임 결과 | 결과 표시 |
+| `recording_progress` | 녹음 제출 진행률 | N/M명 완료 표시 |
+| `checkpoint_result` | 핑이타임 결과 (전원 제출) | → `/r/:code/result` 이동 |
+| `result_ack_progress` | 결과 확인 진행률 | N/M명 확인 표시 |
+| `pingi_live_resumed` | 전원 확인 완료 | → `/r/:code/live` 복귀 (타이머 동기화) |
 | `room_ended` | 술자리 종료 | → `/r/:code/awards` 이동 |
 | `home_checkin_result` | 귀가 체크인 완료 | 귀가 현황 업데이트 |
+
+> **구현 참고**: `useWebSocket` 훅은 콜백을 ref로 추적하여 소켓 연결이 불필요하게 재연결되지 않도록 안정화되어 있습니다.
 
 ---
 
