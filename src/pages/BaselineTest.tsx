@@ -1,16 +1,16 @@
 /**
  * @file BaselineTest.tsx - 베이스라인 녹음 페이지
  *
- * 술자리 시작 전, 사용자의 정상 발음 상태를 측정하는 화면이다.
- * 3개의 잰말(난이도 높은 문장)을 하나씩 녹음하며, 각 문장마다 5초간 녹음한다.
- * "녹음 시작" / "녹음 종료" 버튼으로 수동 제어하며,
- * 녹음 중에는 실시간 파형(VoiceWaveform)과 진행 상황(ProgressBar)이 표시된다.
- * 3회차 모두 완료하면 베이스라인 데이터를 서버에 저장하고,
- * 모든 멤버가 완료될 때까지 대기 후 술자리 메인 화면(SessionDashboard)으로 이동한다.
+ * 통일 문장 3회 녹음 → uploadBaseline → AI analyze-baseline.
  */
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { BASELINE_SENTENCES } from '@/constants/sentences'
+import {
+  BASELINE_MIN_SECONDS,
+  BASELINE_RECORD_SECONDS,
+  BASELINE_SENTENCES,
+  PINGI_PROMPT_SENTENCE,
+} from '@/constants/sentences'
 import Button from '@/components/common/Button'
 import Card from '@/components/common/Card'
 import VoiceWaveform from '@/components/voice/VoiceWaveform'
@@ -19,77 +19,98 @@ import ProgressBar from '@/components/common/ProgressBar'
 import PageTransition from '@/components/layout/PageTransition'
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder'
 import { useWebSocket } from '@/hooks/useWebSocket'
-import { completeBaseline, getCurrentMemberId } from '@/services/api'
-
-const RECORD_DURATION = 5
+import { getCurrentMemberId, uploadBaseline } from '@/services/api'
 
 export default function BaselineTest() {
   const { code } = useParams<{ code: string }>()
   const navigate = useNavigate()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [recordSeconds, setRecordSeconds] = useState(0)
-  const [waitingForOthers, setWaitingForOthers] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const { isRecording, startRecording, stopRecording, resetRecording } = useVoiceRecorder()
+  const [recordedBlobs, setRecordedBlobs] = useState<Blob[]>([])
+  const [phase, setPhase] = useState<'record' | 'uploading' | 'waiting'>('record')
+  const [hint, setHint] = useState<string | null>(null)
+  const pendingStopRef = useRef(false)
+  const { isRecording, audioBlob, startRecording, stopRecording, resetRecording } =
+    useVoiceRecorder()
 
-  // WebSocket 연결 - all_baseline_complete 이벤트 시 자동으로 /live로 이동
-  useWebSocket({
-    roomCode: code || '',
-  })
+  useWebSocket({ roomCode: code || '' })
 
   const isAllDone = currentIndex >= BASELINE_SENTENCES.length
+  const canStop = isRecording && recordSeconds >= BASELINE_MIN_SECONDS
 
-  const handleBaselineComplete = async () => {
-    const memberId = getCurrentMemberId()
-    if (!memberId) return
+  const submitBaseline = useCallback(
+    async (blobs: Blob[]) => {
+      const memberId = getCurrentMemberId()
+      if (!memberId || blobs.length < BASELINE_SENTENCES.length) return
 
-    setSubmitting(true)
-    try {
-      const result = await completeBaseline(memberId)
-      if (result.allCompleted) {
-        // 모든 멤버가 완료됨 - WebSocket 이벤트로 자동 이동됨
-        // 하지만 API 호출한 사람은 바로 이동
-        navigate(`/r/${code}/live`)
-      } else {
-        // 아직 다른 멤버 대기 중
-        setWaitingForOthers(true)
+      setPhase('uploading')
+      try {
+        const sentences = BASELINE_SENTENCES.map(() => PINGI_PROMPT_SENTENCE)
+        const result = await uploadBaseline(memberId, blobs, [...sentences])
+        if (result.allCompleted) {
+          navigate(`/r/${code}/live`)
+        } else {
+          setPhase('waiting')
+        }
+      } catch (error) {
+        console.error('Failed to upload baseline:', error)
+        setHint('업로드에 실패했어요. 다시 시도해 주세요.')
+        setPhase('record')
+        setCurrentIndex(blobs.length)
+        setRecordedBlobs(blobs)
       }
-    } catch (error) {
-      console.error('Failed to complete baseline:', error)
-    } finally {
-      setSubmitting(false)
-    }
-  }
+    },
+    [code, navigate],
+  )
 
-  const handleComplete = useCallback(() => {
-    stopRecording()
+  useEffect(() => {
+    if (!audioBlob || !pendingStopRef.current) return
+    pendingStopRef.current = false
+
+    setRecordedBlobs((prev) => {
+      const nextBlobs = [...prev, audioBlob]
+      if (nextBlobs.length < BASELINE_SENTENCES.length) {
+        setCurrentIndex(nextBlobs.length)
+      } else {
+        setCurrentIndex(BASELINE_SENTENCES.length)
+        void submitBaseline(nextBlobs)
+      }
+      return nextBlobs
+    })
     resetRecording()
     setRecordSeconds(0)
+    setHint(null)
+  }, [audioBlob, resetRecording, submitBaseline])
 
-    if (currentIndex < BASELINE_SENTENCES.length - 1) {
-      setCurrentIndex(currentIndex + 1)
-    } else {
-      setCurrentIndex(BASELINE_SENTENCES.length)
+  const handleStopRecording = useCallback(() => {
+    if (recordSeconds < BASELINE_MIN_SECONDS) {
+      setHint(`조금만 더 읽어주세요 (최소 ${BASELINE_MIN_SECONDS}초)`)
+      return
     }
-  }, [currentIndex, stopRecording, resetRecording])
+    pendingStopRef.current = true
+    stopRecording()
+  }, [recordSeconds, stopRecording])
 
   useEffect(() => {
     if (!isRecording) return
 
     const timer = setInterval(() => {
       setRecordSeconds((s) => {
-        if (s >= RECORD_DURATION - 1) {
-          handleComplete()
-          return 0
+        const next = s + 1
+        if (next >= BASELINE_RECORD_SECONDS) {
+          pendingStopRef.current = true
+          stopRecording()
+          return BASELINE_RECORD_SECONDS
         }
-        return s + 1
+        return next
       })
     }, 1000)
 
     return () => clearInterval(timer)
-  }, [isRecording, handleComplete])
+  }, [isRecording, stopRecording])
 
   const handleStartRecording = () => {
+    setHint(null)
     setRecordSeconds(0)
     startRecording()
   }
@@ -101,45 +122,39 @@ export default function BaselineTest() {
           <h1 className="font-display text-xl text-brown-900">
             🎙️ 베이스라인 녹음
           </h1>
-          {!isAllDone && (
-            <p className="text-sm text-brown-500 mt-1">
-              ({currentIndex + 1} / {BASELINE_SENTENCES.length} 회차)
-            </p>
+          {phase === 'record' && !isAllDone && (
+            <>
+              <p className="text-sm text-brown-500 mt-1">
+                ({currentIndex + 1} / {BASELINE_SENTENCES.length} 회차 · 같은 문장)
+              </p>
+              <p className="text-xs text-brown-400 mt-0.5">
+                3회 합쳐 약 20초 · 끝까지 읽고 바로 종료해도 돼요
+              </p>
+            </>
           )}
         </div>
 
-        {isAllDone ? (
+        {phase === 'uploading' ? (
           <div className="flex-1 flex flex-col items-center justify-center">
-            {waitingForOthers ? (
-              <>
-                <div className="text-5xl mb-4 animate-pulse">⏳</div>
-                <p className="font-display text-lg text-brown-900">
-                  다른 멤버를 기다리는 중...
-                </p>
-                <p className="text-sm text-brown-500 mt-2">
-                  모두 베이스라인 녹음이 완료되면<br />자동으로 이동해요
-                </p>
-              </>
-            ) : (
-              <>
-                <div className="text-5xl mb-4">✅</div>
-                <p className="font-display text-lg text-brown-900">
-                  베이스라인 저장 완료!
-                </p>
-                <p className="text-sm text-brown-500 mt-2">
-                  잠시만 기다려주세요...
-                </p>
-              </>
-            )}
+            <div className="text-5xl mb-4 animate-pulse">🔍</div>
+            <p className="font-display text-lg text-brown-900">핑이가 목소리를 저장 중...</p>
+          </div>
+        ) : phase === 'waiting' || isAllDone ? (
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <div className="text-5xl mb-4 animate-pulse">⏳</div>
+            <p className="font-display text-lg text-brown-900">다른 멤버를 기다리는 중...</p>
+            <p className="text-sm text-brown-500 mt-2">
+              모두 베이스라인이 끝나면 자동으로 이동해요
+            </p>
           </div>
         ) : (
           <>
             <Card className="mt-6 text-center">
               <p className="text-brown-500 text-xs mb-2">
-                위 문장을 자연스럽게 읽어주세요
+                또박또박 끝까지 읽고, 다 읽으면 종료 (최소 {BASELINE_MIN_SECONDS}초)
               </p>
               <p className="font-display text-lg text-brown-900 leading-relaxed">
-                "{BASELINE_SENTENCES[currentIndex]}"
+                &ldquo;{PINGI_PROMPT_SENTENCE}&rdquo;
               </p>
             </Card>
 
@@ -147,8 +162,13 @@ export default function BaselineTest() {
               {isRecording ? (
                 <>
                   <VoiceWaveform active />
-                  <RecStatus seconds={recordSeconds + 1} total={RECORD_DURATION} />
-                  <ProgressBar percent={((recordSeconds + 1) / RECORD_DURATION) * 100} />
+                  <RecStatus seconds={recordSeconds} total={BASELINE_RECORD_SECONDS} />
+                  <ProgressBar
+                    percent={Math.min((recordSeconds / BASELINE_RECORD_SECONDS) * 100, 100)}
+                  />
+                  {hint && (
+                    <p className="text-xs text-amber-700 text-center">{hint}</p>
+                  )}
                 </>
               ) : (
                 <div className="text-center">
@@ -161,26 +181,21 @@ export default function BaselineTest() {
           </>
         )}
 
-        <div className="mt-auto pt-6">
-          {isAllDone ? (
-            waitingForOthers ? (
-              <div className="text-center py-3 bg-brown-100 rounded-xl">
-                <p className="text-sm text-brown-500">다른 멤버 대기 중...</p>
-              </div>
-            ) : (
-              <Button onClick={handleBaselineComplete} disabled={submitting}>
-                {submitting ? '저장 중...' : '완료! 🎉'}
-              </Button>
-            )
-          ) : (
+        {phase === 'record' && !isAllDone && (
+          <div className="mt-auto pt-6">
             <Button
               variant={isRecording ? 'secondary' : 'primary'}
-              onClick={isRecording ? handleComplete : handleStartRecording}
+              onClick={isRecording ? handleStopRecording : handleStartRecording}
+              disabled={isRecording && !canStop}
             >
-              {isRecording ? '⏹ 녹음 중지' : '🔴 녹음 시작'}
+              {isRecording
+                ? canStop
+                  ? '✓ 다 읽었어요'
+                  : `읽는 중… (${BASELINE_MIN_SECONDS}초부터 종료)`
+                : '🔴 녹음 시작'}
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </PageTransition>
   )
