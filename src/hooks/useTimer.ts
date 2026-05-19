@@ -13,10 +13,19 @@ interface UseTimerOptions {
   durationMs: number     // 전체 시간 (밀리초)
   onComplete?: () => void // 타이머 완료 시 호출할 콜백
   autoStart?: boolean     // true면 마운트 즉시 시작
+  /** 서버에서 동기화한 절대 종료 시각 (모든 클라이언트 동일 타이머) */
+  endsAtMs?: number | null
 }
 
-export function useTimer({ durationMs, onComplete, autoStart = false }: UseTimerOptions) {
-  const [remaining, setRemaining] = useState(durationMs)
+function initialRemaining(durationMs: number, endsAtMs?: number | null): number {
+  if (endsAtMs && endsAtMs > Date.now()) {
+    return endsAtMs - Date.now()
+  }
+  return durationMs
+}
+
+export function useTimer({ durationMs, onComplete, autoStart = false, endsAtMs }: UseTimerOptions) {
+  const [remaining, setRemaining] = useState(() => initialRemaining(durationMs, endsAtMs))
   const [isRunning, setIsRunning] = useState(autoStart)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const endTimeRef = useRef(0)
@@ -40,8 +49,17 @@ export function useTimer({ durationMs, onComplete, autoStart = false }: UseTimer
   }, [durationMs, stop])
 
   useEffect(() => {
+    if (!endsAtMs || endsAtMs <= Date.now()) return
+    endTimeRef.current = endsAtMs
+    setRemaining(endsAtMs - Date.now())
+    setIsRunning(true)
+  }, [endsAtMs])
+
+  useEffect(() => {
     if (!isRunning) return
-    endTimeRef.current = Date.now() + remaining
+    if (!endTimeRef.current) {
+      endTimeRef.current = Date.now() + remaining
+    }
 
     intervalRef.current = setInterval(() => {
       const left = endTimeRef.current - Date.now()

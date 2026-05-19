@@ -254,7 +254,7 @@ export async function uploadBaseline(
   memberId: string,
   audioBlobs: Blob[],
   sentences: string[]
-): Promise<{ baselineId: string; featureVector: Record<string, number> }> {
+): Promise<{ baselineId: string; allCompleted: boolean }> {
   const formData = new FormData();
   audioBlobs.forEach((blob, i) => formData.append(`audio_${i + 1}`, blob, `audio_${i + 1}.wav`));
   sentences.forEach((s, i) => formData.append(`sentence_${i + 1}`, s));
@@ -278,7 +278,18 @@ export async function completeBaseline(
 export async function uploadRecording(
   checkpointId: string,
   audioBlob: Blob
-): Promise<{ recording: { id: string; score: number; level: number; previousLevel: number; delta: number } }> {
+): Promise<{
+  recording: {
+    id: string;
+    score: number;
+    level: number;
+    previousLevel: number;
+    delta: number;
+    levelDescription?: string;
+    isFakeActing?: boolean;
+    status?: 'normal' | 'fake_acting' | 'drunk';
+  };
+}> {
   const formData = new FormData();
   formData.append('audio', audioBlob, 'recording.wav');
   
@@ -295,6 +306,15 @@ export async function uploadRecording(
 /** GET /checkpoints/{id}/results - 핑이타임 결과 */
 export async function getCheckpointResult(checkpointId: string): Promise<CheckpointResult> {
   return request(`/checkpoints/${checkpointId}/results`);
+}
+
+/** POST /checkpoints/{id}/ack - 핑이타임 결과 확인 (전원 확인 시 라이브 복귀) */
+export async function acknowledgeCheckpointResult(checkpointId: string): Promise<{
+  ackedCount: number;
+  totalCount: number;
+  allConfirmed: boolean;
+}> {
+  return request(`/checkpoints/${checkpointId}/ack`, { method: 'POST' });
 }
 
 /** GET /rooms/{code}/report - 최종 리포트 */

@@ -43,16 +43,31 @@ export default function SessionDashboard() {
   const [isHost, setIsHost] = useState(false)
   const [loading, setLoading] = useState(true)
   const [triggering, setTriggering] = useState(false)
+  const [triggerError, setTriggerError] = useState<string | null>(null)
+  const [nextPingiEndsAt, setNextPingiEndsAt] = useState<number | null>(() => {
+    if (!code) return null
+    const raw = sessionStorage.getItem(`pingi_next_ends_${code}`)
+    if (!raw) return null
+    const t = Date.parse(raw)
+    return t > Date.now() ? t : null
+  })
 
-  // WebSocket 연결 - pingi_time_started 시 자동으로 녹음 화면으로 이동
   useWebSocket({
     roomCode: code || '',
     onMemberUpdated: () => fetchRoom(),
+    onPingiLiveResumed: (payload) => {
+      const endsAt = Date.parse(payload.nextPingiEndsAt)
+      if (code) {
+        sessionStorage.setItem(`pingi_next_ends_${code}`, payload.nextPingiEndsAt)
+      }
+      setNextPingiEndsAt(endsAt)
+    },
   })
 
   const { remaining } = useTimer({
     durationMs: TEST_INTERVAL_MS,
     autoStart: true,
+    endsAtMs: nextPingiEndsAt,
     onComplete: async () => {
       // 타이머 종료 시 방장만 핑이타임 트리거
       if (isHost && code) {
@@ -228,13 +243,12 @@ export default function SessionDashboard() {
             onClick={async () => {
               if (!code) return
               setTriggering(true)
+              setTriggerError(null)
               try {
                 await triggerPingiTime(code)
-                // WebSocket이 pingi_time_started를 수신하면 모두 녹음 화면으로 이동
-                // 트리거한 사람은 바로 이동
-                navigate(`/r/${code}/record`)
               } catch (error) {
-                console.error('Failed to trigger pingi time:', error)
+                const msg = error instanceof Error ? error.message : '핑이타임 시작에 실패했어요'
+                setTriggerError(msg)
               } finally {
                 setTriggering(false)
               }
@@ -242,6 +256,10 @@ export default function SessionDashboard() {
           >
             {triggering ? '시작 중...' : '🌀 지금 바로 핑이타임!'}
           </Button>
+
+          {triggerError && (
+            <p className="text-sm text-red-600 text-center">{triggerError}</p>
+          )}
 
           {isHost && (
             <Button

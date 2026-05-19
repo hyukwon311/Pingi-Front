@@ -21,6 +21,8 @@ export type WebSocketEventType =
   | 'pingi_time_started'
   | 'recording_progress'
   | 'checkpoint_result'
+  | 'result_ack_progress'
+  | 'pingi_live_resumed'
   | 'room_ended'
   | 'home_checkin_started'
   | 'home_checkin_result'
@@ -83,6 +85,8 @@ class PingiWebSocket {
       'pingi_time_started',
       'recording_progress',
       'checkpoint_result',
+      'result_ack_progress',
+      'pingi_live_resumed',
       'room_ended',
       'home_checkin_started',
       'home_checkin_result',
