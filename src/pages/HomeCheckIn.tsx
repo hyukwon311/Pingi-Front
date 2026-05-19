@@ -192,16 +192,30 @@ export default function HomeCheckIn() {
     if (playingAudio === nickname) {
       audioRef.current?.pause()
       setPlayingAudio(null)
-    } else {
-      if (audioRef.current) {
-        audioRef.current.src = audioUrl
-        audioRef.current.play().catch(err => {
-          console.error('Audio play failed:', err)
-          alert('음성 재생에 실패했습니다.')
-        })
-        setPlayingAudio(nickname)
-      }
+      return
     }
+
+    if (audioRef.current) {
+      audioRef.current.pause()
+    }
+
+    const audio = new Audio(audioUrl)
+    audio.crossOrigin = 'anonymous'
+    audioRef.current = audio
+
+    audio.onended = () => setPlayingAudio(null)
+    audio.onerror = () => {
+      console.error('Audio load error:', audio.error?.message, 'src:', audioUrl)
+      setPlayingAudio(null)
+      alert('음성 재생에 실패했어요. 파일이 없거나 형식을 지원하지 않아요.')
+    }
+
+    audio.load()
+    audio.play().catch(err => {
+      console.error('Audio play failed:', err)
+      setPlayingAudio(null)
+    })
+    setPlayingAudio(nickname)
   }
 
   if (loading) {
@@ -326,8 +340,7 @@ export default function HomeCheckIn() {
           )}
         </div>
 
-        {/* 숨겨진 오디오 플레이어 */}
-        <audio ref={audioRef} onEnded={() => setPlayingAudio(null)} />
+        {/* audioRef는 new Audio()로 관리 — DOM 요소 불필요 */}
       </div>
     </PageTransition>
   )
