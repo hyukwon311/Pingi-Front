@@ -1,10 +1,14 @@
 /**
  * @file useWebSocket.ts - WebSocket 연결 및 실시간 이벤트 처리 훅
+ *
+ * 콜백이 바뀌어도 소켓 연결을 유지하기 위해 ref로 최신 콜백을 추적한다.
+ * 소켓 연결/해제는 roomCode가 바뀔 때만 수행한다.
  */
 import { useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { pingiWS } from '@/services/websocket'
 import { getAuthToken } from '@/services/api'
+import type { CheckpointResult } from '@/services/api'
 
 interface UseWebSocketOptions {
   roomCode: string
@@ -13,24 +17,28 @@ interface UseWebSocketOptions {
   onRoomStarted?: (payload: { status: string; startedAt: string }) => void
   onAllBaselineComplete?: (payload: { startedAt: string }) => void
   onPingiTimeStarted?: (payload: { checkpointId: string; index: number; sentence: string; countdownSeconds: number }) => void
-  onCheckpointResult?: (payload: unknown) => void
+  onRecordingProgress?: (payload: { checkpointId: string; submittedCount: number; totalCount: number }) => void
+  onCheckpointResult?: (payload: CheckpointResult) => void
+  onResultAckProgress?: (payload: { checkpointId: string; ackedCount: number; totalCount: number }) => void
+  onPingiLiveResumed?: (payload: { checkpointId: string; nextPingiEndsAt: string }) => void
   onRoomEnded?: (payload: { status: string; reportId: string }) => void
   autoNavigate?: boolean
 }
 
-export function useWebSocket({
-  roomCode,
-  onMemberJoined,
-  onMemberUpdated,
-  onRoomStarted,
-  onAllBaselineComplete,
-  onPingiTimeStarted,
-  onCheckpointResult,
-  onRoomEnded,
-  autoNavigate = true,
-}: UseWebSocketOptions) {
+export function useWebSocket(opts: UseWebSocketOptions) {
+  const {
+    roomCode,
+    autoNavigate = true,
+  } = opts
+
   const navigate = useNavigate()
   const connectedRef = useRef(false)
+
+  const optsRef = useRef(opts)
+  optsRef.current = opts
+
+  const navigateRef = useRef(navigate)
+  navigateRef.current = navigate
 
   const connect = useCallback(() => {
     const token = getAuthToken()
@@ -40,7 +48,7 @@ export function useWebSocket({
     }
 
     if (connectedRef.current) return
-    
+
     pingiWS.connect(roomCode, token)
     connectedRef.current = true
   }, [roomCode])
@@ -55,73 +63,86 @@ export function useWebSocket({
 
     connect()
 
-    // 이벤트 핸들러 등록
     const cleanups: (() => void)[] = []
 
-    // 멤버 입장
-    if (onMemberJoined) {
-      cleanups.push(pingiWS.on('member_joined', onMemberJoined))
-    }
+    cleanups.push(pingiWS.on('member_joined', (payload: { memberId: string; nickname: string }) => {
+      optsRef.current.onMemberJoined?.(payload)
+    }))
 
-    // 멤버 정보 업데이트
-    if (onMemberUpdated) {
-      cleanups.push(pingiWS.on('member_updated', onMemberUpdated))
-    }
+    cleanups.push(pingiWS.on('member_updated', (payload: { memberId: string; [key: string]: unknown }) => {
+      optsRef.current.onMemberUpdated?.(payload)
+    }))
 
-    // 방 시작 (술자리 시작) → 캐릭터 확인 → 베이스라인 → 핑이 Live
     cleanups.push(pingiWS.on('room_started', (payload: { status: string; startedAt: string }) => {
       console.log('[WS] Room started:', payload)
-      onRoomStarted?.(payload)
-      if (autoNavigate) {
-        // 캐릭터 확인 화면으로 이동 (베이스라인 녹음 전)
-        navigate(`/r/${roomCode}/confirm`)
+      optsRef.current.onRoomStarted?.(payload)
+      if (optsRef.current.autoNavigate !== false) {
+        navigateRef.current(`/r/${roomCode}/confirm`)
       }
     }))
 
-    // 모든 멤버 베이스라인 완료 → 핑이 Live로 이동
     cleanups.push(pingiWS.on('all_baseline_complete', (payload: { startedAt: string }) => {
       console.log('[WS] All baseline complete:', payload)
-      onAllBaselineComplete?.(payload)
-      if (autoNavigate) {
-        navigate(`/r/${roomCode}/live`)
+      optsRef.current.onAllBaselineComplete?.(payload)
+      if (optsRef.current.autoNavigate !== false) {
+        navigateRef.current(`/r/${roomCode}/live`)
       }
     }))
 
-    // 핑이타임 시작
     cleanups.push(pingiWS.on('pingi_time_started', (payload: { checkpointId: string; index: number; sentence: string; countdownSeconds: number }) => {
       console.log('[WS] Pingi time started:', payload)
-      onPingiTimeStarted?.(payload)
-      if (autoNavigate) {
-        // 녹음 화면으로 이동하고 checkpoint 정보 전달
-        navigate(`/r/${roomCode}/record`, { 
-          state: { 
+      optsRef.current.onPingiTimeStarted?.(payload)
+      if (optsRef.current.autoNavigate !== false) {
+        navigateRef.current(`/r/${roomCode}/record`, {
+          state: {
             checkpointId: payload.checkpointId,
             sentence: payload.sentence,
             index: payload.index,
-          } 
+          },
         })
       }
     }))
 
-    // 체크포인트 결과
-    if (onCheckpointResult) {
-      cleanups.push(pingiWS.on('checkpoint_result', onCheckpointResult))
-    }
+    cleanups.push(pingiWS.on('recording_progress', (payload: { checkpointId: string; submittedCount: number; totalCount: number }) => {
+      optsRef.current.onRecordingProgress?.(payload)
+    }))
 
-    // 방 종료
+    cleanups.push(pingiWS.on('checkpoint_result', (payload: CheckpointResult) => {
+      console.log('[WS] Checkpoint result:', payload)
+      optsRef.current.onCheckpointResult?.(payload)
+      if (optsRef.current.autoNavigate !== false) {
+        navigateRef.current(`/r/${roomCode}/result`, {
+          state: { checkpointResult: payload },
+        })
+      }
+    }))
+
+    cleanups.push(pingiWS.on('result_ack_progress', (payload: { checkpointId: string; ackedCount: number; totalCount: number }) => {
+      optsRef.current.onResultAckProgress?.(payload)
+    }))
+
+    cleanups.push(pingiWS.on('pingi_live_resumed', (payload: { checkpointId: string; nextPingiEndsAt: string }) => {
+      console.log('[WS] Pingi live resumed:', payload)
+      sessionStorage.setItem(`pingi_next_ends_${roomCode}`, payload.nextPingiEndsAt)
+      optsRef.current.onPingiLiveResumed?.(payload)
+      if (optsRef.current.autoNavigate !== false) {
+        navigateRef.current(`/r/${roomCode}/live`)
+      }
+    }))
+
     cleanups.push(pingiWS.on('room_ended', (payload: { status: string; reportId: string }) => {
       console.log('[WS] Room ended:', payload)
-      onRoomEnded?.(payload)
-      if (autoNavigate) {
-        navigate(`/r/${roomCode}/awards`)
+      optsRef.current.onRoomEnded?.(payload)
+      if (optsRef.current.autoNavigate !== false) {
+        navigateRef.current(`/r/${roomCode}/awards`)
       }
     }))
 
     return () => {
-      cleanups.forEach(cleanup => cleanup())
+      cleanups.forEach((cleanup) => cleanup())
       disconnect()
     }
-  }, [roomCode, connect, disconnect, navigate, autoNavigate, onMemberJoined, onMemberUpdated, onRoomStarted, onAllBaselineComplete, onPingiTimeStarted, onCheckpointResult, onRoomEnded])
+  }, [roomCode, connect, disconnect])
 
   return { connect, disconnect }
 }
