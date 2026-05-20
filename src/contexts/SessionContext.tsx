@@ -21,7 +21,8 @@ import {
   type ReactNode,
   type Dispatch,
 } from 'react'
-import type { Room, Member, DrinkType } from '@/types/room'
+import type { Room, Member } from '@/services/api'
+import type { DrinkType } from '@/types/room'
 
 type SessionAction =
   | { type: 'SET_ROOM'; payload: Room }
@@ -55,7 +56,7 @@ function reducer(state: SessionState, action: SessionAction): SessionState {
         room: {
           ...state.room,
           members: state.room.members.map((m) =>
-            m.memberId === action.payload.memberId ? action.payload : m
+            m.id === action.payload.id ? action.payload : m
           ),
         },
       }
@@ -67,11 +68,11 @@ function reducer(state: SessionState, action: SessionAction): SessionState {
         room: {
           ...state.room,
           members: state.room.members.map((m) =>
-            m.memberId === action.payload.memberId
+            m.id === action.payload.memberId
               ? {
                   ...m,
-                  drinkCounts: {
-                    ...m.drinkCounts,
+                  drinks: {
+                    ...m.drinks,
                     [action.payload.drinkType]: Math.max(0, action.payload.count),
                   },
                 }

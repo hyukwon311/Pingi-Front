@@ -4,16 +4,26 @@
  * 세션 대시보드에서 각 참가자의 정보(닉네임, 취도, 음주량, 취도 변화 그래프)를 표시한다.
  * 본인(isMe=true)인 경우 음주량 +/- 카운터가 노출되고,
  * 다른 사람인 경우 잔 수만 텍스트로 표시된다.
- *
- * @param participant - 참가자 데이터
- * @param isMe - 현재 로그인한 사용자 본인 여부
- * @param onDrinkIncrement - 잔 수 증가 콜백 (본인일 때만 사용)
- * @param onDrinkDecrement - 잔 수 감소 콜백 (본인일 때만 사용)
  */
 import Card from '@/components/common/Card'
 import DrunkLevelBadge from './DrunkLevelBadge'
 import DrinkCounter from './DrinkCounter'
-import type { Participant } from '@/types/session'
+
+interface LevelEntry {
+  level: number
+  timestamp: number
+}
+
+interface ParticipantUser {
+  nickname: string
+}
+
+interface Participant {
+  user: ParticipantUser
+  drunkLevel: number
+  drinkCount: number
+  levelHistory: LevelEntry[]
+}
 
 interface ParticipantCardProps {
   participant: Participant
@@ -49,7 +59,7 @@ export default function ParticipantCard({
 
       {levelHistory.length > 1 && (
         <div className="h-12 flex items-end gap-1 px-1">
-          {levelHistory.map((entry, i) => (
+          {levelHistory.map((entry: LevelEntry, i: number) => (
             <div
               key={i}
               className="flex-1 rounded-t-md bg-pingi-200/60"

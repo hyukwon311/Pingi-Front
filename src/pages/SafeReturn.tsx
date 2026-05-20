@@ -53,7 +53,7 @@ export default function SafeReturn() {
         })))
 
         // 통계 계산
-        const sortedByLevel = [...room.members].sort((a, b) => b.level - a.level)
+        const sortedByLevel = [...room.members].sort((a, b) => (b.level ?? 0) - (a.level ?? 0))
         const maxMember = sortedByLevel[0]
         
         setStats({

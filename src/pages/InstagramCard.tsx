@@ -46,7 +46,7 @@ export default function InstagramCard() {
         const dateStr = `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`
 
         // 멤버 레벨 정렬 (높은 순)
-        const sortedMembers = [...room.members].sort((a, b) => b.level - a.level)
+        const sortedMembers = [...room.members].sort((a, b) => (b.level ?? 0) - (a.level ?? 0))
         const winner = sortedMembers[0]?.nickname || ''
 
         setSessionInfo({
@@ -57,7 +57,7 @@ export default function InstagramCard() {
 
         setMembers(room.members.map(m => ({
           nickname: m.nickname,
-          level: m.level,
+          level: m.level ?? 0,
           breed: (m.breed || 'retriever') as CharacterBreed,
         })))
       } catch (error) {

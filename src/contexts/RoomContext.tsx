@@ -14,7 +14,8 @@ import {
   useCallback,
   type ReactNode,
 } from 'react'
-import type { Room, CurrentMember, CharacterBreed, HungerLevel } from '@/types/room'
+import type { CurrentMember, CharacterBreed } from '@/types/room'
+import type { Room } from '@/services/api'
 
 const STORAGE_KEY = 'pingi_member'
 
