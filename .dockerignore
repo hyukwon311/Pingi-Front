@@ -1,0 +1,18 @@
+# Pingi-Frontend Docker Ignore
+node_modules
+dist
+dist-ssr
+.git
+.gitignore
+.idea
+.vscode
+.DS_Store
+*.log
+*.local
+.claude/
+.omc/
+.cursor/
+pingi-docs/
+CLAUDE.md
+BACKEND-CHECKLIST.md
+.env*

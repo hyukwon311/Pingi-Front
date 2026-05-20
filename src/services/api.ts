@@ -4,7 +4,7 @@
  * 백엔드 REST API와 통신하기 위한 서비스 함수들을 제공한다.
  */
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/v1';
+const API_BASE = import.meta.env.VITE_API_URL ?? '/v1';
 
 // ─────────────────────────────────────────────────────────────
 //   타입 정의
@@ -170,11 +170,11 @@ export async function createRoom(data: CreateRoomRequest): Promise<CreateRoomRes
     method: 'POST',
     body: JSON.stringify(data),
   });
-  
+
   // 토큰과 멤버ID 저장
   setAuthToken(response.host.token);
   setCurrentMemberId(response.host.id);
-  
+
   return response;
 }
 
@@ -189,11 +189,11 @@ export async function joinRoom(code: string, data: JoinRoomRequest): Promise<Joi
     method: 'POST',
     body: JSON.stringify(data),
   });
-  
+
   // 토큰과 멤버ID 저장
   setAuthToken(response.member.token);
   setCurrentMemberId(response.member.id);
-  
+
   return response;
 }
 
@@ -258,7 +258,7 @@ export async function uploadBaseline(
   const formData = new FormData();
   audioBlobs.forEach((blob, i) => formData.append(`audio_${i + 1}`, blob, `audio_${i + 1}.wav`));
   sentences.forEach((s, i) => formData.append(`sentence_${i + 1}`, s));
-  
+
   return request(`/members/${memberId}/baseline`, {
     method: 'POST',
     body: formData,
@@ -292,7 +292,7 @@ export async function uploadRecording(
 }> {
   const formData = new FormData();
   formData.append('audio', audioBlob, 'recording.wav');
-  
+
   return request(`/checkpoints/${checkpointId}/recordings`, {
     method: 'POST',
     body: formData,
@@ -358,7 +358,7 @@ export async function checkInHome(
   if (transcript) {
     formData.append('transcript', transcript);
   }
-  
+
   return request(`/members/${memberId}/home`, {
     method: 'POST',
     body: (audioBlob || transcript) ? formData : undefined,

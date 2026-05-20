@@ -48,30 +48,30 @@ export default function WaitingRoom() {
     try {
       const room = await getRoom(code)
       setRoom(room)
-      
+
       const currentId = getCurrentMemberId()
-      
+
       setMembers(room.members.map(m => ({
         memberId: m.id,
         nickname: m.nickname,
         characterBreed: (m.breed || 'retriever') as CharacterBreed,
-        etaStatus: m.arrived ? 'arrived' : 
+        etaStatus: m.arrived ? 'arrived' :
           m.etaPreset === 'late5' ? '5min' :
-          m.etaPreset === 'late10' ? '10min' :
-          m.etaPreset === 'late20' ? 'late' : 'ontime',
+            m.etaPreset === 'late10' ? '10min' :
+              m.etaPreset === 'late20' ? 'late' : 'ontime',
         isHost: m.isHost,
       })))
-      
+
       setRoomInfo({
         place: room.location,
         scheduledAt: new Date(room.scheduledAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
       })
-      
+
       const me = room.members.find(m => m.id === currentId)
       console.log('[WaitingRoom] currentId:', currentId)
       console.log('[WaitingRoom] members:', room.members.map(m => ({ id: m.id, isHost: m.isHost })))
       console.log('[WaitingRoom] me:', me)
-      
+
       if (me) {
         setIsHost(me.isHost)
         setHasArrived(me.arrived)
@@ -88,13 +88,13 @@ export default function WaitingRoom() {
 
   useEffect(() => {
     fetchRoom()
-    
+
     // 5초마다 방 정보 새로고침
     const interval = setInterval(fetchRoom, 5000)
     return () => clearInterval(interval)
   }, [fetchRoom])
 
-  const shareUrl = `pingi.app/r/${code}`
+  const shareUrl = `${code}`
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(`https://${shareUrl}`)
@@ -105,7 +105,7 @@ export default function WaitingRoom() {
   const handleArrived = async () => {
     const memberId = getCurrentMemberId()
     if (!memberId) return
-    
+
     try {
       await updateMember(memberId, { arrived: true })
       setHasArrived(true)
@@ -119,7 +119,7 @@ export default function WaitingRoom() {
     setMyEta(eta)
     const memberId = getCurrentMemberId()
     if (!memberId) return
-    
+
     try {
       await updateMember(memberId, { etaPreset: eta })
       fetchRoom()
@@ -202,7 +202,7 @@ export default function WaitingRoom() {
         )}
 
         <Card className="mt-5">
-          <p className="text-[10px] text-brown-500 mb-1">링크 공유:</p>
+          <p className="text-[10px] text-brown-500 mb-1">초대 코드:</p>
           <div className="flex items-center gap-2">
             <span className="flex-1 text-sm text-brown-900 font-medium truncate">
               {shareUrl}
