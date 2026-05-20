@@ -136,7 +136,7 @@ export function getCurrentMemberId(): string | null {
 //   HTTP 헬퍼
 // ─────────────────────────────────────────────────────────────
 
-async function request<T>(
+export async function request<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
