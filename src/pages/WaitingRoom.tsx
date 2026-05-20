@@ -94,10 +94,9 @@ export default function WaitingRoom() {
     return () => clearInterval(interval)
   }, [fetchRoom])
 
-  const shareUrl = `${code}`
-
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(`https://${shareUrl}`)
+    if (!code) return
+    await navigator.clipboard.writeText(code)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -205,7 +204,7 @@ export default function WaitingRoom() {
           <p className="text-[10px] text-brown-500 mb-1">초대 코드:</p>
           <div className="flex items-center gap-2">
             <span className="flex-1 text-sm text-brown-900 font-medium truncate">
-              {shareUrl}
+              {code}
             </span>
             <button
               onClick={handleCopy}
