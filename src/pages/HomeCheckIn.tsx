@@ -47,7 +47,7 @@ export default function HomeCheckIn() {
   const [submitting, setSubmitting] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const timerRef = useRef<number | null>(null)
-  
+
   const { isRecording, transcript, interimTranscript, startRecording, stopRecording, resetRecording, getTranscriptSnapshot } = useVoiceRecorderWithSTT()
 
   // WebSocket 연결 - 귀가 상태 실시간 업데이트
@@ -61,7 +61,7 @@ export default function HomeCheckIn() {
     try {
       const room = await getRoom(code)
       const currentId = getCurrentMemberId()
-      const API_BASE = import.meta.env.VITE_API_URL?.replace('/v1', '') || 'http://localhost:8000'
+      const API_BASE = (import.meta.env.VITE_API_URL ?? '/v1').replace(/\/v1\/?$/, '')
 
       setMembers(room.members.map(m => {
         const hasHomeCheckin = !!(m as any).homeCheckinAt
@@ -76,11 +76,11 @@ export default function HomeCheckIn() {
 
       // 귀가 체크인한 멤버 후기 (텍스트 또는 음성 중 하나라도 있으면 표시)
       const homeMembers = room.members.filter(m => {
-          const at = (m as any).homeCheckinAt
-          const text = (m as any).homeCheckinTranscript
-          const audio = (m as any).homeCheckinAudioUrl
-          return !!(at && (text || audio))
-        })
+        const at = (m as any).homeCheckinAt
+        const text = (m as any).homeCheckinTranscript
+        const audio = (m as any).homeCheckinAudioUrl
+        return !!(at && (text || audio))
+      })
       setReviews(homeMembers.map(m => ({
         nickname: m.nickname,
         breed: (m.breed || 'retriever') as CharacterBreed,
@@ -117,7 +117,7 @@ export default function HomeCheckIn() {
     setIsRecordingReview(true)
     setRecordSeconds(0)
     await startRecording()
-    
+
     timerRef.current = window.setInterval(() => {
       setRecordSeconds((s) => s + 1)
     }, 1000)
@@ -128,14 +128,14 @@ export default function HomeCheckIn() {
       clearInterval(timerRef.current)
       timerRef.current = null
     }
-    
+
     setIsRecordingReview(false)
     setSubmitting(true)
-    
+
     // 녹음 중지하고 blob이 준비될 때까지 대기 (종료 시점 STT 스냅샷은 훅 내부에서 처리)
     const recordedBlob = await stopRecording()
     const finalTranscript = getTranscriptSnapshot()
-    
+
     // API로 귀가 체크인 전송 (오디오 + STT 텍스트)
     const memberId = getCurrentMemberId()
     if (memberId) {
@@ -188,7 +188,7 @@ export default function HomeCheckIn() {
       alert('음성 파일이 없습니다.')
       return
     }
-    
+
     if (playingAudio === nickname) {
       audioRef.current?.pause()
       setPlayingAudio(null)
@@ -252,7 +252,7 @@ export default function HomeCheckIn() {
             <p className="text-sm text-brown-900 mb-3">오늘 술자리 한마디!</p>
             <VoiceWaveform active={isRecording} />
             <RecStatus seconds={recordSeconds + 1} total={10} />
-            
+
             {/* 실시간 STT 표시 */}
             {(transcript || interimTranscript) && (
               <div className="mt-3 p-2 bg-brown-50 rounded-lg">
@@ -262,7 +262,7 @@ export default function HomeCheckIn() {
                 </p>
               </div>
             )}
-            
+
             <p className="text-xs text-brown-400 mt-2">
               다 말했으면 녹음 종료를 눌러주세요
             </p>
@@ -320,19 +320,19 @@ export default function HomeCheckIn() {
               </Button>
             </>
           )}
-          
+
           {!isRecordingReview && myStatus === 'pending' && (
             <Button variant="ghost" onClick={handleStillMoving}>
               🚖 아직 이동 중
             </Button>
           )}
-          
+
           {myStatus === 'moving' && !isRecordingReview && (
             <div className="text-center py-2">
               <p className="text-sm text-brown-500">🚖 이동 중으로 표시됨</p>
             </div>
           )}
-          
+
           {allHome && !isRecordingReview && (
             <Button variant="ghost" onClick={() => navigate(`/r/${code}/done`)}>
               모두 귀가 완료 확인

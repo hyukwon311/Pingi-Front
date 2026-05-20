@@ -1,0 +1,19 @@
+# Pingi-Frontend Docker Compose
+
+services:
+  pingi-frontend:
+    build:
+      context: .
+      args:
+        VITE_API_URL: /v1
+        VITE_WS_URL: ""
+    container_name: pingi-frontend
+    ports:
+      - "9603:80"
+    restart: unless-stopped
+    networks:
+      - pingi_net
+
+networks:
+  pingi_net:
+    external: true
